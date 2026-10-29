@@ -55,6 +55,7 @@ For a CPU profile, build `cargo build --profile profiling` (release with line ta
 Decided by the operator on 2026-10-29: "udev + small helper". The GUI runs unprivileged.
 
 - RAPL `energy_uj` is root-only by default because of the PLATYPUS power side channel. `system/60-sysglance-rapl.rules` makes it readable by group `wheel`, which re-opens that channel to members of `wheel`. Without the rule, the power readings say `needs privilege` and name the rule.
+- **Pending: the small helper.** The operator's decision covers a helper for SMART (NVMe and SATA health) and MSRs (C-state residency, effective clock, throttle reasons, TjMax), both root-only. It is not built yet. `msr` already loads at boot so the helper has something to read.
 - `install.sh` installs the binary, the desktop entry, the udev rule and `system/sysglance-modules.conf`, which loads `drivetemp` (SATA drive temperatures through hwmon) and `msr` at boot.
 
 ## Power limits
