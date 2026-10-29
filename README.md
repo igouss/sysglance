@@ -4,7 +4,7 @@ A GPUI window that shows every temperature, voltage, fan, clock, power, load and
 
 It follows the Omarchy theme and font and recolours itself within a second of `omarchy-theme-set`. It is Wayland-only.
 
-Sources so far: hwmon (every chip: Super I/O, CPU, DIMMs, NVMe, SATA via `drivetemp`, GPU, Wi-Fi), RAPL power and limits, CPU load, clocks, idle states and throttle counters, RAM, swap, paging and zram, pressure stall (PSI), and DIMM SPD.
+Sources so far: hwmon (every chip: Super I/O, CPU, DIMMs, NVMe, SATA via `drivetemp`, GPU, Wi-Fi), RAPL power and limits, CPU load, clocks, idle states and throttle counters, RAM, swap, paging and zram, pressure stall (PSI), DIMM SPD, CPU registers (what limits the clock, core voltage, TjMax, turbo ladder, SMIs, hardware C-state residency) and SMART health for every drive.
 
 ## Install
 
@@ -12,7 +12,13 @@ Sources so far: hwmon (every chip: Super I/O, CPU, DIMMs, NVMe, SATA via `drivet
 ./install.sh
 ```
 
-This builds the release binary into `~/.local/bin`, adds a desktop entry, and with sudo installs a udev rule that lets group `wheel` read RAPL energy counters. It also loads `drivetemp` and `msr` at boot.
+This builds the release binary into `~/.local/bin` and adds a desktop entry. With sudo it then:
+
+- installs a udev rule that lets group `wheel` read RAPL energy counters;
+- installs `sysglance-helper` to `/usr/local/libexec` with a sudoers rule that lets `wheel` run it, with no arguments, to read CPU registers and SMART;
+- loads `drivetemp` and `msr` at boot.
+
+SMART needs `smartctl` (smartmontools).
 
 ## Check
 
