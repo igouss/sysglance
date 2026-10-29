@@ -53,5 +53,9 @@ opt-level = 3
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+strip = true
+
+[profile.profiling]
+inherits = "release"
 strip = false
 debug = "line-tables-only"
