@@ -1,0 +1,19 @@
+[package]
+name = "sysglance-helper"
+version = "0.1.0"
+description = "Root-side reader for sysglance: a fixed set of MSRs and smartctl health, streamed to stdout"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[package.metadata.hex-arch]
+role = "composition-root"
+
+[dependencies]
+sysglance-core = { path = "../core" }
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints]
+workspace = true

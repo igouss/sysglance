@@ -6080,6 +6080,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "sysglance-helper"
+version = "0.1.0"
+dependencies = [
+ "sysglance-core",
+ "tempfile",
+]
+
+[[package]]
 name = "sysinfo"
 version = "0.31.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

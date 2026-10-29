@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "core"]
+members = [".", "core", "helper"]
 
 [workspace.package]
 edition = "2024"
