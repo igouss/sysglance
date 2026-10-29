@@ -152,7 +152,7 @@ fn the_package_reads_voltage_temperature_target_and_turbo_ladder() {
     );
     assert_eq!(
         value(&package, "msr:package/turbo"),
-        &text("1-3: 5.1, 4-5: 4.8, 6-8: 4.7 GHz")
+        &text("1-3:5.1 4-5:4.8 6-8:4.7 GHz")
     );
     assert_eq!(value(&package, "msr:package/cstate-limit"), &text("PC0"));
 }
@@ -258,7 +258,7 @@ fn a_ladder_of_one_ratio_per_core_count_names_each_count() {
     let found = devices(sys.path(), None, &latest);
     assert_eq!(
         value(device(&found, "msr:package"), "msr:package/turbo"),
-        &text("1: 5.1, 2: 4.9, 3: 4.7, 4: 4.5 GHz")
+        &text("1:5.1 2:4.9 3:4.7 4:4.5 GHz")
     );
 }
 

@@ -74,13 +74,13 @@ fn ladder(ratios: &[u64]) -> Value {
         } else {
             format!("{first}-{last}")
         };
-        runs.push(format!("{cores}: {:.1}", ratio_hz(run[0]) / 1e9));
+        runs.push(format!("{cores}:{:.1}", ratio_hz(run[0]) / 1e9));
         first = last + 1;
     }
     Value::Text(if runs.is_empty() {
         "none".to_owned()
     } else {
-        format!("{} GHz", runs.join(", "))
+        format!("{} GHz", runs.join(" "))
     })
 }
 
