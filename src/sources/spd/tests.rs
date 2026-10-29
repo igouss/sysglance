@@ -96,3 +96,13 @@ fn no_modules_means_no_device() {
     let root = TempDir::new().unwrap();
     assert_eq!(Spd::new(root.path()).collect(Duration::ZERO).len(), 0);
 }
+
+#[test]
+fn modules_are_read_once() {
+    let root = TempDir::new().unwrap();
+    module(root.path(), "19-0050", "ee1004", CORSAIR);
+    let mut spd = Spd::new(root.path());
+    let first = spd.collect(Duration::ZERO);
+    fs::remove_dir_all(root.path().join("19-0050")).unwrap();
+    assert_eq!(spd.collect(Duration::ZERO), first);
+}

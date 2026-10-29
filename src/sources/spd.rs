@@ -1,4 +1,8 @@
-use std::{fs, path::PathBuf, time::Duration};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use sysglance_core::reading::{Category, Device, Reading, Unavailable, Value};
 
@@ -57,70 +61,78 @@ pub fn ddr4(spd: &[u8]) -> Option<Module> {
 
 pub struct Spd {
     root: PathBuf,
+    read: Option<Vec<Device>>,
 }
 
 impl Spd {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: root.into(),
+            read: None,
+        }
     }
 }
 
 impl Source for Spd {
     fn collect(&mut self, _elapsed: Duration) -> Vec<Device> {
-        let Ok(entries) = fs::read_dir(&self.root) else {
-            return Vec::new();
-        };
-        let mut chips: Vec<PathBuf> = entries
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| {
-                text(&path.join("name")).is_ok_and(|name| name == "ee1004" || name == "spd5118")
-            })
-            .collect();
-        chips.sort();
-        let readings: Vec<Reading> = chips
-            .iter()
-            .map(|chip| {
-                let path = chip.join("eeprom");
-                let address = chip
-                    .file_name()
-                    .map(|name| name.to_string_lossy().into_owned())
-                    .unwrap_or_default();
-                let value = match fs::read(&path) {
-                    Err(e) => Value::Unavailable(Unavailable::Unreadable(e.to_string())),
-                    Ok(spd) => {
-                        ddr4(&spd).map_or(Value::Unavailable(Unavailable::NotSupported), |module| {
-                            Value::Text(format!(
-                                "{} {} · {} GiB DDR4-{} · {}R×{}",
-                                module.manufacturer,
-                                module.part,
-                                module.bytes >> 30,
-                                module.transfers,
-                                module.ranks,
-                                module.width
-                            ))
-                        })
-                    }
-                };
-                Reading {
-                    key: format!("spd/{address}"),
-                    label: format!("module {address}"),
-                    value,
-                    origin: origin(&path),
-                }
-            })
-            .collect();
-        if readings.is_empty() {
-            return Vec::new();
-        }
-        vec![Device {
-            key: "spd".to_owned(),
-            title: "Memory modules".to_owned(),
-            detail: "SPD EEPROM · JEDEC rating, not the running speed".to_owned(),
-            category: Category::Memory,
-            readings,
-        }]
+        self.read.get_or_insert_with(|| modules(&self.root)).clone()
     }
+}
+
+fn modules(root: &Path) -> Vec<Device> {
+    let Ok(entries) = fs::read_dir(root) else {
+        return Vec::new();
+    };
+    let mut chips: Vec<PathBuf> = entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            text(&path.join("name")).is_ok_and(|name| name == "ee1004" || name == "spd5118")
+        })
+        .collect();
+    chips.sort();
+    let readings: Vec<Reading> = chips
+        .iter()
+        .map(|chip| {
+            let path = chip.join("eeprom");
+            let address = chip
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let value = match fs::read(&path) {
+                Err(e) => Value::Unavailable(Unavailable::Unreadable(e.to_string())),
+                Ok(spd) => {
+                    ddr4(&spd).map_or(Value::Unavailable(Unavailable::NotSupported), |module| {
+                        Value::Text(format!(
+                            "{} {} · {} GiB DDR4-{} · {}R×{}",
+                            module.manufacturer,
+                            module.part,
+                            module.bytes >> 30,
+                            module.transfers,
+                            module.ranks,
+                            module.width
+                        ))
+                    })
+                }
+            };
+            Reading {
+                key: format!("spd/{address}"),
+                label: format!("module {address}"),
+                value,
+                origin: origin(&path),
+            }
+        })
+        .collect();
+    if readings.is_empty() {
+        return Vec::new();
+    }
+    vec![Device {
+        key: "spd".to_owned(),
+        title: "Memory modules".to_owned(),
+        detail: "SPD EEPROM · JEDEC rating, not the running speed".to_owned(),
+        category: Category::Memory,
+        readings,
+    }]
 }
 
 #[cfg(test)]
