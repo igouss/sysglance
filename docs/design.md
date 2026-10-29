@@ -7,7 +7,9 @@ sysglance shows every sensor and counter this machine exposes in one GPUI window
 - `core/` (`sysglance-core`, hex role `domain`): readings, units, limits, levels, counter rates, history. It does no I/O: its `Cargo.toml` lists no dependencies and `core/clippy.toml` bans file, process, network, clock and thread calls. Gate: `scripts/check.sh` (clippy `-D warnings`, `hex-lint`).
 - `src/sources/`: one adapter per kernel interface. Each takes its root directory as a parameter, so tests run against fixture trees in a temp dir. They implement `Source::collect(elapsed)`, and counter sources keep their previous raw value to turn it into a rate.
 - `src/sampler.rs`: one thread collects every source each second and publishes the arranged devices with a generation number.
-- `src/view.rs`: GPUI. It polls the generation every 100 ms and redraws only when it changes, so an idle window costs no GPU time.
+- `src/view.rs`: GPUI with `gpui-component` (dark theme, scrollbar, tooltips). It polls the generation every 100 ms and redraws only when it changes, so an idle window costs no GPU time.
+- **Frames do no formatting.** Force: scrolling redraws every frame, and rebuilding every row's strings, sparkline and tooltip made scrolling slow. When a sample arrives, the view builds a display model of shared strings and 40-bar sparklines; a frame only places it.
+- **Only cards near the viewport are built.** Force: the same. `src/layout.rs` packs cards into masonry columns from their known heights (cards have fixed row heights), and a frame builds elements only for cards within 400 px of the visible area. Gate: `src/layout/tests.rs`.
 
 ## Invariants
 

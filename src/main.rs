@@ -1,3 +1,4 @@
+mod layout;
 mod sampler;
 mod sources;
 mod view;
