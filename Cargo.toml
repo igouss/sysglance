@@ -36,8 +36,8 @@ role = "composition-root"
 
 [dependencies]
 sysglance-core = { path = "core" }
-gpui = { package = "gpui-pre", version = "=0.3.6", default-features = false, features = ["wayland"] }
-gpui_platform = { package = "gpui-pre-platform", version = "=0.3.6", features = ["wayland"] }
+gpui = { package = "gpui-pre", version = "=0.3.10", default-features = false, features = ["wayland"] }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.10", features = ["wayland"] }
 
 [dev-dependencies]
 serde_json = "1"
