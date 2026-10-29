@@ -1,0 +1,1 @@
+SUBSYSTEM=="powercap", KERNEL=="intel-rapl:*", RUN+="/usr/bin/chgrp wheel /sys%p/energy_uj", RUN+="/usr/bin/chmod 0440 /sys%p/energy_uj"

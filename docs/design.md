@@ -21,6 +21,17 @@ sysglance shows every sensor and counter this machine exposes in one GPUI window
 
 `cargo test live -- --ignored` reads this machine's `/sys/class/hwmon` and runs `sensors -j` in the same second. Every lm_sensors `*_input` must match a sysglance reading with the same label: temperatures within 3 °C, fans within 150 rpm, voltages within 50 mV. It goes red when the temperature scale is wrong by a factor of ten.
 
+## Privilege
+
+Decided by the operator on 2026-10-29: "udev + small helper". The GUI runs unprivileged.
+
+- RAPL `energy_uj` is root-only by default because of the PLATYPUS power side channel. `system/60-sysglance-rapl.rules` makes it readable by group `wheel`, which re-opens that channel to members of `wheel`. Without the rule, the power readings say `needs privilege` and name the rule.
+- `install.sh` installs the binary, the desktop entry, the udev rule and `system/sysglance-modules.conf`, which loads `drivetemp` (SATA drive temperatures through hwmon) and `msr` at boot.
+
+## Power limits
+
+The package card shows PL1 (`long_term`) and PL2 (`short_term`) from powercap. A limit of 4000 W or more is shown as `unlimited`: ASUS firmware writes 4095.875 W when it stops enforcing Intel's limits. The rated power (`constraint_0_max_power_uw`, 125 W on the i7-10700K) is the package power's high limit, so sustained draw above TDP turns the reading amber.
+
 ## Unverified
 
 - NCT6798 voltage channels `in0`–`in14` show raw volts at the chip pin. On ASUS boards `in1` is usually +5 V read ×5 and `in4` is usually +12 V read ×12. That mapping has not been checked against this board's BIOS hardware monitor page.

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=sysglance
+Comment=Every sensor and counter on this machine at a glance
+Exec=sysglance
+Icon=utilities-system-monitor
+Categories=System;Monitor;
