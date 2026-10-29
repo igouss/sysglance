@@ -1,3 +1,4 @@
+pub mod cpu;
 pub mod hwmon;
 
 use std::{fs, io, path::Path, time::Duration};
