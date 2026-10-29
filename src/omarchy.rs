@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env, path::PathBuf, process::Command};
+use std::{collections::HashMap, env, ffi::OsString, path::PathBuf, process::Command};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Palette {
@@ -68,17 +68,25 @@ pub fn parse(text: &str) -> Option<Palette> {
     })
 }
 
-pub fn colours_path() -> Option<PathBuf> {
-    let state = env::var_os("XDG_STATE_HOME")
+pub fn colours_in(state: Option<OsString>, home: Option<OsString>) -> Option<PathBuf> {
+    let state = state
         .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/state")))?;
+        .or_else(|| home.map(|home| PathBuf::from(home).join(".local/state")))?;
     Some(state.join("omarchy/current/theme/colors.toml"))
+}
+
+pub fn colours_path() -> Option<PathBuf> {
+    colours_in(env::var_os("XDG_STATE_HOME"), env::var_os("HOME"))
+}
+
+pub fn family(succeeded: bool, stdout: &[u8]) -> Option<String> {
+    let family = std::str::from_utf8(stdout).ok()?.trim().to_owned();
+    (succeeded && !family.is_empty()).then_some(family)
 }
 
 pub fn font() -> Option<String> {
     let output = Command::new("omarchy-font-current").output().ok()?;
-    let family = String::from_utf8(output.stdout).ok()?.trim().to_owned();
-    (output.status.success() && !family.is_empty()).then_some(family)
+    family(output.status.success(), &output.stdout)
 }
 
 #[cfg(test)]

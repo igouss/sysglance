@@ -19,7 +19,10 @@ fn write(root: &Path, file: &str, content: &str) {
 
 fn stat(user: u64, idle: u64, iowait: u64, ctxt: u64) -> String {
     format!(
-        "cpu  {user} 0 0 {idle} {iowait} 0 0 0 0 0\ncpu0 {user} 0 0 {idle} {iowait} 0 0 0 0 0\nctxt {ctxt}\nprocs_running 3\nprocs_blocked 0\n"
+        "cpu  {user} 0 0 {idle} {iowait} 0 0 0 0 0\ncpu0 0 0 0 {} 0 0 0 0 0 0\nctxt {ctxt}\nintr {} 1 2\nprocesses {}\nprocs_running 3\nprocs_blocked 1\n",
+        user + idle + iowait,
+        ctxt * 2,
+        ctxt / 10
     )
 }
 
@@ -49,6 +52,37 @@ fn a_cpu_line_sums_busy_and_total_jiffies() {
             iowait: 5,
             total: 131
         }
+    );
+}
+
+#[test]
+fn a_four_field_cpu_line_is_read() {
+    assert_eq!(jiffies("cpu0 1 2 3 4").map(|(_, j)| j.total), Some(10));
+}
+
+#[test]
+fn the_clock_range_reads_in_gigahertz() {
+    let root = TempDir::new().unwrap();
+    write(
+        root.path(),
+        "sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq",
+        "800000\n",
+    );
+    for (file, khz) in [
+        ("cpuinfo_min_freq", "800000"),
+        ("base_frequency", "3800000"),
+        ("cpuinfo_max_freq", "5100000"),
+    ] {
+        write(
+            root.path(),
+            &format!("sys/devices/system/cpu/cpufreq/policy0/{file}"),
+            &format!("{khz}\n"),
+        );
+    }
+    let devices = Cpu::new(root.path().join("proc"), root.path().join("sys")).collect(SECOND);
+    assert_eq!(
+        *value(device(&devices, "cpu:clock"), "cpu:clock/range"),
+        Value::Text("0.8/3.8/5.1 GHz".to_owned())
     );
 }
 
@@ -120,6 +154,19 @@ fn load_and_rates_come_from_two_samples() {
         Measure::PerSecond(1000.0)
     );
     assert_eq!(measure(value(load, "cpu:load/running")), Measure::Count(3));
+    assert_eq!(measure(value(load, "cpu:load/blocked")), Measure::Count(1));
+    assert_eq!(
+        measure(value(load, "cpu:load/cpu0")),
+        Measure::Fraction(0.0)
+    );
+    assert_eq!(
+        measure(value(load, "cpu:load/intr")),
+        Measure::PerSecond(2000.0)
+    );
+    assert_eq!(
+        measure(value(load, "cpu:load/processes")),
+        Measure::PerSecond(100.0)
+    );
 }
 
 #[test]
@@ -204,11 +251,11 @@ fn idle_residency_is_a_share_of_every_threads_time() {
     let mut cpu = Cpu::new(root.path().join("proc"), root.path().join("sys"));
     cpu.collect(SECOND);
     state(0, 1_000_000);
-    state(1, 0);
+    state(1, 500_000);
     let devices = cpu.collect(SECOND);
     assert_eq!(
         measure(value(device(&devices, "cpu:idle"), "cpu:idle/C1_ACPI")),
-        Measure::Fraction(0.5)
+        Measure::Fraction(0.75)
     );
 }
 
@@ -218,7 +265,7 @@ fn throttling_counts_package_once_and_each_physical_core() {
     for (cpu, core, siblings, count) in [
         (0, 0, "0,2", 4),
         (1, 1, "1,3", 0),
-        (2, 0, "0,2", 4),
+        (2, 0, "0,2", 9),
         (3, 1, "1,3", 0),
     ] {
         let dir = format!("sys/devices/system/cpu/cpu{cpu}");

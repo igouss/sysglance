@@ -27,7 +27,7 @@ fn level(bars: &[f32], slots: usize, x: usize, width: usize) -> Option<f32> {
         clippy::cast_sign_loss,
         reason = "a non-negative bar index"
     )]
-    let left = (along.floor() as usize).min(bars.len() - 1);
+    let left = along.floor() as usize;
     let right = (left + 1).min(bars.len() - 1);
     #[expect(clippy::cast_precision_loss, reason = "a few dozen bars")]
     let t = along - left as f32;

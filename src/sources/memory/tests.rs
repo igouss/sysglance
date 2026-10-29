@@ -70,6 +70,10 @@ fn ram_in_use_is_total_less_available() {
         measure(value(&devices, "memory:ram/swap")),
         Measure::Fraction(0.25)
     );
+    assert_eq!(
+        measure(value(&devices, "memory:ram/swap_bytes")),
+        Measure::Bytes(102_400.0)
+    );
 }
 
 #[test]

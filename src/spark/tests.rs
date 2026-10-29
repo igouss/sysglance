@@ -51,6 +51,21 @@ fn values_between_bars_are_interpolated() {
 }
 
 #[test]
+fn interpolation_is_between_the_neighbouring_bars() {
+    let image = raster(&[0.0, 0.5, 1.0], 3, 5, 5, WHITE);
+    assert_eq!(column(&image, 5, 5, 3)[1], 255);
+}
+
+#[test]
+fn a_one_pixel_wide_sparkline_paints_nothing() {
+    assert!(
+        raster(&[1.0, 1.0], 2, 1, 2, WHITE)
+            .iter()
+            .all(|&byte| byte == 0)
+    );
+}
+
+#[test]
 fn colour_is_stored_blue_green_red_alpha() {
     let image = raster(
         &[1.0, 1.0],

@@ -1,6 +1,8 @@
 use std::fs;
 
-use super::{Palette, parse};
+use std::{ffi::OsString, path::PathBuf};
+
+use super::{Palette, colours_in, family, parse};
 
 const EVERFOREST: &str = include_str!("everforest.toml");
 const LATTE: &str = include_str!("catppuccin-latte.toml");
@@ -56,6 +58,43 @@ fn malformed_colours_are_ignored() {
     )
     .unwrap();
     assert_eq!((palette.critical, palette.normal), (0xff_ffff, 0xff_ffff));
+}
+
+#[test]
+fn colours_live_under_the_state_directory() {
+    assert_eq!(
+        colours_in(Some(OsString::from("/s")), Some(OsString::from("/h"))),
+        Some(PathBuf::from("/s/omarchy/current/theme/colors.toml"))
+    );
+}
+
+#[test]
+fn without_a_state_directory_colours_live_under_home() {
+    assert_eq!(
+        colours_in(None, Some(OsString::from("/h"))),
+        Some(PathBuf::from(
+            "/h/.local/state/omarchy/current/theme/colors.toml"
+        ))
+    );
+}
+
+#[test]
+fn without_state_or_home_there_is_no_theme() {
+    assert_eq!(colours_in(None, None), None);
+}
+
+#[test]
+fn the_font_is_the_trimmed_output_of_a_successful_run() {
+    assert_eq!(
+        family(true, b"JetBrainsMono Nerd Font\n"),
+        Some("JetBrainsMono Nerd Font".to_owned())
+    );
+}
+
+#[test]
+fn a_failed_or_empty_run_has_no_font() {
+    assert_eq!(family(false, b"JetBrainsMono Nerd Font\n"), None);
+    assert_eq!(family(true, b"  \n"), None);
 }
 
 #[test]

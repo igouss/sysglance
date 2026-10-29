@@ -375,3 +375,92 @@ fn live_readings_agree_with_lm_sensors() {
     }
     assert!(compared > 40, "compared only {compared} readings");
 }
+
+#[test]
+fn current_frequency_and_humidity_are_read_in_their_units() {
+    let root = TempDir::new().unwrap();
+    chip(
+        root.path(),
+        "hwmon0",
+        &[
+            ("name", "sensor\n"),
+            ("curr1_input", "1500\n"),
+            ("freq1_input", "300000000\n"),
+            ("humidity1_input", "45000\n"),
+        ],
+    );
+    let devices = collect(root.path());
+    let measures: Vec<Measure> = only(&devices)
+        .readings
+        .iter()
+        .map(|r| measured(&r.value).0)
+        .collect();
+    assert_eq!(
+        measures,
+        [
+            Measure::Amps(1.5),
+            Measure::Hertz(3e8),
+            Measure::Fraction(0.45)
+        ]
+    );
+}
+
+#[test]
+fn an_it87_chip_is_the_board() {
+    let root = TempDir::new().unwrap();
+    chip(
+        root.path(),
+        "hwmon0",
+        &[("name", "it8689\n"), ("temp1_input", "1000\n")],
+    );
+    let devices = collect(root.path());
+    assert_eq!(
+        (only(&devices).category, only(&devices).title.as_str()),
+        (Category::Board, "Super I/O IT8689")
+    );
+}
+
+#[test]
+fn a_wifi_chip_is_the_network() {
+    let root = TempDir::new().unwrap();
+    chip(
+        root.path(),
+        "hwmon0",
+        &[("name", "iwlwifi_1\n"), ("temp1_input", "1000\n")],
+    );
+    assert_eq!(only(&collect(root.path())).category, Category::Network);
+}
+
+#[test]
+fn an_unknown_chip_is_the_system_titled_by_its_name() {
+    let root = TempDir::new().unwrap();
+    chip(
+        root.path(),
+        "hwmon0",
+        &[("name", "mystery\n"), ("temp1_input", "1000\n")],
+    );
+    let devices = collect(root.path());
+    assert_eq!(
+        (
+            only(&devices).category,
+            only(&devices).title.as_str(),
+            only(&devices).detail.as_str()
+        ),
+        (Category::System, "mystery", "hwmon mystery")
+    );
+}
+
+#[test]
+fn a_reading_names_the_file_it_came_from() {
+    let root = TempDir::new().unwrap();
+    chip(
+        root.path(),
+        "hwmon0",
+        &[("name", "acpitz\n"), ("temp1_input", "1000\n")],
+    );
+    let devices = collect(root.path());
+    assert_eq!(
+        only(&devices).readings[0].origin,
+        root.path().join("hwmon0/temp1_input").display().to_string()
+    );
+}

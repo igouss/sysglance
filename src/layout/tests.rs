@@ -114,6 +114,11 @@ fn too_little_history_has_no_bars() {
 }
 
 #[test]
+fn two_values_make_two_bars() {
+    assert_eq!(buckets(&[1.0, 2.0], 2), [0.0, 1.0]);
+}
+
+#[test]
 fn bars_scale_between_the_lowest_and_highest_value() {
     assert_eq!(buckets(&[10.0, 20.0, 15.0], 3), [0.0, 1.0, 0.5]);
 }

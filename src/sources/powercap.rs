@@ -104,7 +104,7 @@ fn zones(root: &Path) -> Vec<PathBuf> {
     let mut zones: Vec<PathBuf> = entries
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .filter(|path| path.join("energy_uj").exists() && path.join("name").exists())
+        .filter(|path| path.join("energy_uj").exists())
         .collect();
     zones.sort();
     zones

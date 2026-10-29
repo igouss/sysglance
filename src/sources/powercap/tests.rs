@@ -150,3 +150,39 @@ fn an_unreadable_counter_names_the_grant() {
         Value::Unavailable(Unavailable::NeedsPrivilege(GRANT))
     );
 }
+
+#[test]
+fn an_unreadable_counter_that_is_not_a_permission_error_says_so() {
+    let root = TempDir::new().unwrap();
+    zone(root.path(), "intel-rapl:0", "package-0", 0, &[]);
+    let counter = root.path().join("intel-rapl:0/energy_uj");
+    fs::remove_file(&counter).unwrap();
+    fs::create_dir(&counter).unwrap();
+    let devices = Powercap::new(root.path()).collect(SECOND);
+    assert!(matches!(
+        &devices[0].readings[0].value,
+        Value::Unavailable(Unavailable::Unreadable(_))
+    ));
+}
+
+#[test]
+fn a_zone_without_a_name_is_skipped() {
+    let root = TempDir::new().unwrap();
+    zone(root.path(), "intel-rapl:0", "package-0", 0, &[]);
+    fs::remove_file(root.path().join("intel-rapl:0/name")).unwrap();
+    assert_eq!(Powercap::new(root.path()).collect(SECOND).len(), 0);
+}
+
+#[test]
+fn a_zero_tdp_is_not_shown() {
+    let root = TempDir::new().unwrap();
+    zone(
+        root.path(),
+        "intel-rapl:0",
+        "package-0",
+        0,
+        &[("constraint_0_max_power_uw", "0\n")],
+    );
+    let devices = Powercap::new(root.path()).collect(SECOND);
+    assert_eq!(labels(&devices[0]), ["package-0 power"]);
+}

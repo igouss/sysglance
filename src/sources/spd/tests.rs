@@ -31,6 +31,14 @@ fn a_real_ddr4_spd_decodes() {
 }
 
 #[test]
+fn the_first_350_bytes_are_enough() {
+    assert_eq!(
+        ddr4(&CORSAIR[..350]).map(|module| module.transfers),
+        Some(2666)
+    );
+}
+
+#[test]
 fn a_short_spd_is_not_ddr4() {
     assert_eq!(ddr4(&CORSAIR[..100]), None);
 }
