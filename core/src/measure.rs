@@ -156,6 +156,16 @@ mod tests {
     }
 
     #[test]
+    fn bytes_past_the_largest_unit_stay_in_it() {
+        assert_eq!(Measure::Bytes(1024.0_f64.powi(6)).to_string(), "1024.0 PiB");
+    }
+
+    #[test]
+    fn hertz_past_the_largest_prefix_stay_in_it() {
+        assert_eq!(Measure::Hertz(1e15).to_string(), "1000.00 THz");
+    }
+
+    #[test]
     fn rates_carry_a_per_second_suffix() {
         assert_eq!(Measure::BytesPerSecond(2048.0).to_string(), "2.0 KiB/s");
     }
@@ -183,6 +193,21 @@ mod tests {
     #[test]
     fn short_durations_show_milliseconds() {
         assert_eq!(Measure::Seconds(0.25).to_string(), "250.0 ms");
+    }
+
+    #[test]
+    fn one_second_shows_seconds() {
+        assert_eq!(Measure::Seconds(1.0).to_string(), "1.0 s");
+    }
+
+    #[test]
+    fn a_minute_shows_seconds() {
+        assert_eq!(Measure::Seconds(60.0).to_string(), "60.0 s");
+    }
+
+    #[test]
+    fn two_minutes_show_as_hours_and_minutes() {
+        assert_eq!(Measure::Seconds(120.0).to_string(), "0h 2m");
     }
 
     #[test]

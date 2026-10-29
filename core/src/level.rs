@@ -126,6 +126,15 @@ mod tests {
     }
 
     #[test]
+    fn each_limit_reads_back() {
+        let limits = Limits::new(Some(-5.0), Some(80.0), Some(85.0));
+        assert_eq!(
+            (limits.low(), limits.high(), limits.critical()),
+            (Some(-5.0), Some(80.0), Some(85.0))
+        );
+    }
+
+    #[test]
     fn a_reading_without_limits_is_unrated() {
         assert_eq!(level(59.0, Limits::NONE, Alarms::default()), Level::Unrated);
     }
