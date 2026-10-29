@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use gpui::{
-    App, Bounds, ContentMask, Font, Hsla, Pixels, SharedString, TextAlign, TextRun, Window, point,
-    px, size,
+    App, Bounds, ContentMask, Font, Hsla, Pixels, SharedString, TextAlign, TextRun, TruncateFrom,
+    Window, point, px, size,
 };
 
 use super::{
@@ -58,15 +58,28 @@ impl Painter<'_> {
             return;
         }
         let run = Self::run(content, face, colour);
-        let line =
-            self.window
-                .text_system()
-                .shape_line(content.clone(), self.palette.size, &[run], None);
+        let system = self.window.text_system();
+        let mut line = system.shape_line(
+            content.clone(),
+            self.palette.size,
+            std::slice::from_ref(&run),
+            None,
+        );
+        if line.width > clip.size.width {
+            let (short, runs) = system
+                .line_wrapper(face.clone(), self.palette.size)
+                .truncate_line(
+                    content.clone(),
+                    clip.size.width,
+                    "…",
+                    std::slice::from_ref(&run),
+                    TruncateFrom::End,
+                );
+            line = system.shape_line(short, self.palette.size, &runs, None);
+        }
         let at = match align {
-            Align::Right if line.width <= clip.size.width => {
-                point(clip.right() - line.width, clip.origin.y)
-            }
-            Align::Right | Align::Left => clip.origin,
+            Align::Right => point(clip.right() - line.width, clip.origin.y),
+            Align::Left => clip.origin,
         };
         let cx = &mut *self.cx;
         self.window
