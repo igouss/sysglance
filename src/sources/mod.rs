@@ -2,6 +2,8 @@ pub mod cpu;
 pub mod hwmon;
 pub mod memory;
 pub mod powercap;
+pub mod pressure;
+pub mod spd;
 
 use std::{fs, io, path::Path, time::Duration};
 
