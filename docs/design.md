@@ -15,7 +15,8 @@ sysglance shows every sensor and counter this machine exposes in one GPUI window
 - **An alarm counts only against a limit that is set.** Same force: a tripped `max_alarm` on an unset `max` is a false alarm. Gate: `Limits::trusted` tests.
 - **A level is computed from the value it describes.** `Value::measured` derives the level from the measure and limits, so the two cannot disagree.
 - **An unavailable reading says why.** `Unavailable` is `Pending` (a rate needs a second sample), `NeedsPrivilege(how)`, `ModuleNotLoaded`, `NotSupported` or `Unreadable(error)`. The tooltip shows the reason and the sysfs path.
-- **Code carries no comments** (cm-k7c). Gate: `scripts/no-comments.sh`, which `scripts/check.sh` and the pre-commit hook run.
+- **Code carries no comments** (cm-k7c). Gate: `scripts/no-comments.sh`, which `scripts/check.sh` runs.
+- **Every commit passes the gate as committed.** Force: a check of the working tree passes a commit that leaves a needed change unstaged. The pre-commit hook runs `scripts/check-snapshot.sh`, which exports the index to a temp dir and runs `scripts/check.sh` there. `scripts/check-snapshot.sh <rev>` checks any past commit the same way.
 
 ## Known-answer check
 
