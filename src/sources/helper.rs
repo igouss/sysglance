@@ -202,7 +202,7 @@ impl Helper {
             category: Category::System,
             readings: vec![Reading {
                 key: "helper/status".to_owned(),
-                label: "MSR and SMART readings".to_owned(),
+                label: "status".to_owned(),
                 value,
                 origin,
             }],

@@ -58,7 +58,7 @@ pub const LIMIT_REASONS: [(u32, &str); 11] = [
     (10, "PL1"),
     (11, "PL2"),
     (12, "max turbo"),
-    (13, "turbo transition"),
+    (13, "transitions"),
 ];
 
 pub const LIMIT_REASONS_LOGGED: u32 = 16;
@@ -211,7 +211,7 @@ mod tests {
         assert_eq!(flags(raw, &LIMIT_REASONS, 0), vec!["max turbo"]);
         assert_eq!(
             flags(raw, &LIMIT_REASONS, LIMIT_REASONS_LOGGED),
-            vec!["max turbo", "turbo transition"]
+            vec!["max turbo", "transitions"]
         );
     }
 

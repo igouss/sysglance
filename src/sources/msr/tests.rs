@@ -2,7 +2,7 @@ use std::{fs, io::Cursor, path::Path, sync::Mutex};
 
 use sysglance_core::{
     measure::Measure,
-    msr::{PACKAGE_RESIDENCY, PLATFORM_INFO, SMI_COUNT, TSC},
+    msr::{PACKAGE_RESIDENCY, PLATFORM_INFO, SMI_COUNT, TSC, TURBO_RATIO_LIMIT},
     reading::{Device, Unavailable, Value},
 };
 use tempfile::TempDir;
@@ -125,7 +125,7 @@ fn limit_reasons_say_what_limits_the_clock_now_and_since_boot() {
     );
     assert_eq!(
         value(&package, "msr:package/limits/logged"),
-        &text("max turbo, turbo transition")
+        &text("max turbo, transitions")
     );
     assert_eq!(value(&package, "msr:package/thermal/now"), &text("nothing"));
     assert_eq!(
@@ -152,7 +152,7 @@ fn the_package_reads_voltage_temperature_target_and_turbo_ladder() {
     );
     assert_eq!(
         value(&package, "msr:package/turbo"),
-        &text("5.1 / 5.1 / 5.1 / 4.8 / 4.8 / 4.7 / 4.7 / 4.7 GHz")
+        &text("1-3: 5.1, 4-5: 4.8, 6-8: 4.7 GHz")
     );
     assert_eq!(value(&package, "msr:package/cstate-limit"), &text("PC0"));
 }
@@ -249,4 +249,26 @@ fn without_any_core_state_there_is_no_core_card() {
     let latest = Registers::from([((0, TSC), 1)]);
     let found = devices(sys.path(), None, &latest);
     assert!(found.iter().all(|device| device.key != "msr:cores"));
+}
+
+#[test]
+fn a_ladder_of_one_ratio_per_core_count_names_each_count() {
+    let latest = Registers::from([((0, TURBO_RATIO_LIMIT), 0x2d2f_3133)]);
+    let sys = topology(1, 1);
+    let found = devices(sys.path(), None, &latest);
+    assert_eq!(
+        value(device(&found, "msr:package"), "msr:package/turbo"),
+        &text("1: 5.1, 2: 4.9, 3: 4.7, 4: 4.5 GHz")
+    );
+}
+
+#[test]
+fn an_empty_ladder_says_none() {
+    let latest = Registers::from([((0, TURBO_RATIO_LIMIT), 0)]);
+    let sys = topology(1, 1);
+    let found = devices(sys.path(), None, &latest);
+    assert_eq!(
+        value(device(&found, "msr:package"), "msr:package/turbo"),
+        &text("none")
+    );
 }

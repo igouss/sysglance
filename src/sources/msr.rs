@@ -64,12 +64,24 @@ fn named(names: &[&str]) -> Value {
     })
 }
 
-fn ghz(ratios: &[u64]) -> Value {
-    let shown: Vec<String> = ratios
-        .iter()
-        .map(|ratio| format!("{:.1}", ratio_hz(*ratio) / 1e9))
-        .collect();
-    Value::Text(format!("{} GHz", shown.join(" / ")))
+fn ladder(ratios: &[u64]) -> Value {
+    let mut runs: Vec<String> = Vec::new();
+    let mut first: usize = 1;
+    for run in ratios.chunk_by(|a, b| a == b) {
+        let last = first + run.len() - 1;
+        let cores = if first == last {
+            first.to_string()
+        } else {
+            format!("{first}-{last}")
+        };
+        runs.push(format!("{cores}: {:.1}", ratio_hz(run[0]) / 1e9));
+        first = last + 1;
+    }
+    Value::Text(if runs.is_empty() {
+        "none".to_owned()
+    } else {
+        format!("{} GHz", runs.join(", "))
+    })
 }
 
 fn pair(previous: Option<&Registers>, latest: &Registers, at: (u32, u32)) -> Option<(u64, u64)> {
@@ -122,8 +134,8 @@ fn package(previous: Option<&Registers>, latest: &Registers) -> Device {
         let address = CORE_PERF_LIMIT_REASONS;
         let now = named(&flags(raw, &LIMIT_REASONS, 0));
         let logged = named(&flags(raw, &LIMIT_REASONS, LIMIT_REASONS_LOGGED));
-        push(address, "limits/now", "clock limited by", now);
-        push(address, "limits/logged", "limited since boot by", logged);
+        push(address, "limits/now", "limited by", now);
+        push(address, "limits/logged", "limits since boot", logged);
     }
     if let Some(raw) = at(PACKAGE_THERM_STATUS) {
         let address = PACKAGE_THERM_STATUS;
@@ -151,8 +163,8 @@ fn package(previous: Option<&Registers>, latest: &Registers) -> Device {
         );
     }
     if let Some(raw) = at(TURBO_RATIO_LIMIT) {
-        let ladder = ghz(&turbo_ratios(raw));
-        push(TURBO_RATIO_LIMIT, "turbo", "turbo by active cores", ladder);
+        let ladder = ladder(&turbo_ratios(raw));
+        push(TURBO_RATIO_LIMIT, "turbo", "turbo by cores", ladder);
     }
     if at(SMI_COUNT).is_some() {
         push(SMI_COUNT, "smi", "SMIs", smi_rate(previous, latest));
