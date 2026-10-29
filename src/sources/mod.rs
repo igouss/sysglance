@@ -1,5 +1,6 @@
 pub mod cpu;
 pub mod hwmon;
+pub mod memory;
 pub mod powercap;
 
 use std::{fs, io, path::Path, time::Duration};
