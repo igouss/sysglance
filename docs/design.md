@@ -1,0 +1,26 @@
+# sysglance design
+
+sysglance shows every sensor and counter this machine exposes in one GPUI window, refreshed once a second.
+
+## Shape
+
+- `core/` (`sysglance-core`, hex role `domain`): readings, units, limits, levels, counter rates, history. It does no I/O: its `Cargo.toml` lists no dependencies and `core/clippy.toml` bans file, process, network, clock and thread calls. Gate: `scripts/check.sh` (clippy `-D warnings`, `hex-lint`).
+- `src/sources/`: one adapter per kernel interface. Each takes its root directory as a parameter, so tests run against fixture trees in a temp dir. They implement `Source::collect(elapsed)`, and counter sources keep their previous raw value to turn it into a rate.
+- `src/sampler.rs`: one thread collects every source each second and publishes the arranged devices with a generation number.
+- `src/view.rs`: GPUI. It polls the generation every 100 ms and redraws only when it changes, so an idle window costs no GPU time.
+
+## Invariants
+
+- **A limit of zero is unset.** Force: drivers fill unset limits with 0. jc42 reports `max = crit = 0` and the NCT6798 reports `min = max = 0` on most voltage inputs, so their alarm bits read tripped. `Limits::new` drops zero and non-finite limits. Gate: `core/src/level.rs` tests.
+- **An alarm counts only against a limit that is set.** Same force: a tripped `max_alarm` on an unset `max` is a false alarm. Gate: `Limits::trusted` tests.
+- **A level is computed from the value it describes.** `Value::measured` derives the level from the measure and limits, so the two cannot disagree.
+- **An unavailable reading says why.** `Unavailable` is `Pending` (a rate needs a second sample), `NeedsPrivilege(how)`, `ModuleNotLoaded`, `NotSupported` or `Unreadable(error)`. The tooltip shows the reason and the sysfs path.
+- **Code carries no comments** (cm-k7c). Gate: `scripts/no-comments.sh`, which `scripts/check.sh` and the pre-commit hook run.
+
+## Known-answer check
+
+`cargo test live -- --ignored` reads this machine's `/sys/class/hwmon` and runs `sensors -j` in the same second. Every lm_sensors `*_input` must match a sysglance reading with the same label: temperatures within 3 °C, fans within 150 rpm, voltages within 50 mV. It goes red when the temperature scale is wrong by a factor of ten.
+
+## Unverified
+
+- NCT6798 voltage channels `in0`–`in14` show raw volts at the chip pin. On ASUS boards `in1` is usually +5 V read ×5 and `in4` is usually +12 V read ×12. That mapping has not been checked against this board's BIOS hardware monitor page.

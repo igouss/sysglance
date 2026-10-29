@@ -1,0 +1,54 @@
+[workspace]
+members = [".", "core"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.89"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+allow_attributes_without_reason = "warn"
+clone_on_ref_ptr = "warn"
+dbg_macro = "warn"
+unwrap_used = "warn"
+wildcard_enum_match_arm = "warn"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+
+[package]
+name = "sysglance"
+version = "0.1.0"
+description = "At-a-glance view of every sensor and counter this machine exposes"
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[package.metadata.hex-arch]
+role = "composition-root"
+
+[dependencies]
+sysglance-core = { path = "core" }
+gpui = { package = "gpui-pre", version = "=0.3.6", default-features = false, features = ["wayland"] }
+gpui_platform = { package = "gpui-pre-platform", version = "=0.3.6", features = ["wayland"] }
+
+[dev-dependencies]
+serde_json = "1"
+tempfile = "3"
+
+[lints]
+workspace = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

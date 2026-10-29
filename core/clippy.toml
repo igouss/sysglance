@@ -1,0 +1,16 @@
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+disallowed-types = [
+    { path = "std::fs::File", reason = "the core does no I/O" },
+    { path = "std::process::Command", reason = "the core does no I/O" },
+    { path = "std::net::TcpStream", reason = "the core does no I/O" },
+    { path = "std::time::Instant", reason = "the core reads no clock; take a Duration" },
+    { path = "std::time::SystemTime", reason = "the core reads no clock; take a Duration" },
+]
+disallowed-methods = [
+    { path = "std::fs::read_to_string", reason = "the core does no I/O" },
+    { path = "std::fs::read_dir", reason = "the core does no I/O" },
+    { path = "std::fs::read", reason = "the core does no I/O" },
+    { path = "std::env::var", reason = "the core reads no environment" },
+    { path = "std::thread::spawn", reason = "the core spawns nothing" },
+]
