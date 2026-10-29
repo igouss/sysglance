@@ -9,7 +9,13 @@ mod view;
 use std::time::Duration;
 
 use sources::{
-    Source, cpu::Cpu, hwmon::Hwmon, memory::Memory, powercap::Powercap, pressure::Pressure,
+    Source,
+    cpu::Cpu,
+    helper::{self, Helper},
+    hwmon::Hwmon,
+    memory::Memory,
+    powercap::Powercap,
+    pressure::Pressure,
     spd::Spd,
 };
 
@@ -21,6 +27,7 @@ fn main() {
         Box::new(Hwmon::new("/sys/class/hwmon")),
         Box::new(Pressure::new("/proc/pressure")),
         Box::new(Spd::new("/sys/bus/i2c/devices")),
+        Box::new(Helper::spawn(&helper::COMMAND, "/proc", "/sys")),
     ];
     let bench = std::env::args().any(|argument| argument == "--bench-scroll");
     view::run(sampler::spawn(sources, Duration::from_secs(1)), bench);

@@ -1,8 +1,11 @@
 pub mod cpu;
+pub mod helper;
 pub mod hwmon;
 pub mod memory;
+pub mod msr;
 pub mod powercap;
 pub mod pressure;
+pub mod smart;
 pub mod spd;
 
 use std::{
@@ -53,6 +56,7 @@ pub fn cpus(sys: &Path) -> Vec<(u32, PathBuf)> {
 }
 
 pub struct Core {
+    pub cpu: u32,
     pub dir: PathBuf,
     pub id: String,
 }
@@ -68,6 +72,7 @@ pub fn cores(sys: &Path) -> Vec<Core> {
         })
         .map(|(cpu, dir)| Core {
             id: text(&dir.join("topology/core_id")).unwrap_or_else(|_| cpu.to_string()),
+            cpu,
             dir,
         })
         .collect()

@@ -329,7 +329,7 @@ impl Cpu {
 
     fn throttling(&self) -> Option<Device> {
         let mut readings: Vec<Reading> = Vec::new();
-        for Core { dir, id: core } in cores(&self.sys) {
+        for Core { dir, id: core, .. } in cores(&self.sys) {
             let throttle = dir.join("thermal_throttle");
             if !throttle.exists() {
                 continue;
