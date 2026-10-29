@@ -42,7 +42,7 @@ Without an Omarchy theme the window uses gpui-component's dark theme. Gate: `src
 
 ## Frame time
 
-`sysglance --bench-scroll` scrolls the view 37 px every frame for 900 frames, then prints fps, frame-time percentiles and main-thread CPU per frame, and exits. Use main-thread CPU per frame to compare changes: wall-clock fps on this machine swings between 25 and 56 fps on identical code with the background load, while CPU time per frame holds still. On 2026-10-29, with the load average around 9, it read 60.0 fps, p99 18 ms and 3.5–4.1 ms of main-thread CPU per frame, against 8–11 ms before cards were painted.
+`sysglance --bench-scroll` scrolls the view 37 px every frame for 900 frames, then prints fps, frame-time percentiles and main-thread CPU per frame, and exits. Use main-thread CPU per frame to compare changes: wall-clock fps on this machine swings between 25 and 56 fps on identical code with the background load. CPU time per frame drifts too, between 4 and 6.5 ms for the same binary as `llama-server` loads the sibling hyperthreads, so compare two builds only by interleaving their runs in one sitting. A number from an earlier session is not a baseline. On 2026-10-29, with the load average around 9, it read 60.0 fps, p99 18 ms and 3.5–4.1 ms of main-thread CPU per frame, against 8–11 ms before cards were painted.
 
 For a CPU profile, build `cargo build --profile profiling` (release with line tables, unstripped) and run `perf record -g --call-graph dwarf target/profiling/sysglance --bench-scroll`.
 
