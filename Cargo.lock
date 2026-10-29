@@ -6066,6 +6066,7 @@ dependencies = [
  "gpui-component",
  "gpui-pre",
  "gpui-pre-platform",
+ "image",
  "serde_json",
  "sysglance-core",
  "tempfile",

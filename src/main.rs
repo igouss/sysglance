@@ -1,6 +1,8 @@
+mod bench;
 mod layout;
 mod sampler;
 mod sources;
+mod spark;
 mod view;
 
 use std::time::Duration;
@@ -19,5 +21,6 @@ fn main() {
         Box::new(Pressure::new("/proc/pressure")),
         Box::new(Spd::new("/sys/bus/i2c/devices")),
     ];
-    view::run(sampler::spawn(sources, Duration::from_secs(1)));
+    let bench = std::env::args().any(|argument| argument == "--bench-scroll");
+    view::run(sampler::spawn(sources, Duration::from_secs(1)), bench);
 }

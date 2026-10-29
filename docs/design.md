@@ -8,7 +8,8 @@ sysglance shows every sensor and counter this machine exposes in one GPUI window
 - `src/sources/`: one adapter per kernel interface. Each takes its root directory as a parameter, so tests run against fixture trees in a temp dir. They implement `Source::collect(elapsed)`, and counter sources keep their previous raw value to turn it into a rate.
 - `src/sampler.rs`: one thread collects every source each second and publishes the arranged devices with a generation number.
 - `src/view.rs`: GPUI with `gpui-component` (dark theme, scrollbar, tooltips). It polls the generation every 100 ms and redraws only when it changes, so an idle window costs no GPU time.
-- **Frames do no formatting.** Force: scrolling redraws every frame, and rebuilding every row's strings, sparkline and tooltip made scrolling slow. When a sample arrives, the view builds a display model of shared strings and 40-bar sparklines; a frame only places it.
+- **Frames do no formatting.** Force: scrolling redraws every frame. When a sample arrives, `src/view/model.rs` builds a display model: shared strings, and each sparkline rasterised once into a small image (`src/spark.rs`). A frame only places it.
+- **A card is one painted element.** Force: about 210 rows are on screen at once, and GPUI's per-element style, layout and hitbox work for ~6 elements per row cost 8–11 ms of main-thread CPU per frame, so frames slipped to 25–45 ms. `src/view/paint.rs` paints a card's title, rows, values and sparkline images in one canvas, the way Zed's editor paints its lines. Sparklines as quads cost CPU (40 scene primitives per row) and as paths cost GPU time on the UHD 630; as images they are one sprite. Hovering a row shows its source, limits and reason in the footer.
 - **Only cards near the viewport are built.** Force: the same. `src/layout.rs` packs cards into masonry columns from their known heights (cards have fixed row heights), and a frame builds elements only for cards within 400 px of the visible area. Gate: `src/layout/tests.rs`.
 
 ## Invariants
@@ -20,6 +21,10 @@ sysglance shows every sensor and counter this machine exposes in one GPUI window
 - **Code carries no comments** (cm-k7c). Gate: `scripts/no-comments.sh`, which `scripts/check.sh` runs.
 - **Wayland only.** Force: Omarchy runs Hyprland, which has no X11 session, so X11 code is dead weight in the binary. Every GPUI crate is built with `default-features = false, features = ["wayland"]`. Gate: `scripts/wayland-only.sh` fails when any X11 crate (`x11`, `x11rb`, `xcb`, `xim`, ...) is in the resolved dependency tree. It goes red when `x11` is enabled.
 - **Every commit passes the gate as committed.** Force: a check of the working tree passes a commit that leaves a needed change unstaged. The pre-commit hook runs `scripts/check-snapshot.sh`, which exports the index to a temp dir and runs `scripts/check.sh` there. `scripts/check-snapshot.sh <rev>` checks any past commit the same way.
+
+## Frame time
+
+`sysglance --bench-scroll` scrolls the view 37 px every frame for 900 frames, then prints fps, frame-time percentiles and main-thread CPU per frame, and exits. Use main-thread CPU per frame to compare changes: wall-clock fps on this machine swings between 25 and 56 fps on identical code with the background load, while CPU time per frame holds still. On 2026-10-29, with the load average around 9, it read 60.0 fps, p99 18 ms and 3.5–4.1 ms of main-thread CPU per frame, against 8–11 ms before cards were painted.
 
 ## Known-answer check
 
