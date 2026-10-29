@@ -11,7 +11,7 @@ use sysglance_core::{
     reading::{Category, Device, Reading, Unavailable, Value},
 };
 
-use super::{Source, optional, origin, text};
+use super::{Core, Source, cores, cpus, optional, origin, text};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Jiffies {
@@ -197,25 +197,9 @@ impl Cpu {
         readings
     }
 
-    fn cpus(&self) -> Vec<(u32, PathBuf)> {
-        let Ok(entries) = fs::read_dir(self.sys.join("devices/system/cpu")) else {
-            return Vec::new();
-        };
-        let mut cpus: Vec<(u32, PathBuf)> = entries
-            .filter_map(Result::ok)
-            .filter_map(|entry| {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                let index = name.strip_prefix("cpu")?.parse().ok()?;
-                Some((index, entry.path()))
-            })
-            .collect();
-        cpus.sort();
-        cpus
-    }
-
     fn clocks(&self) -> Option<Device> {
         let mut readings: Vec<Reading> = Vec::new();
-        for (index, dir) in self.cpus() {
+        for (index, dir) in cpus(&self.sys) {
             let path = dir.join("cpufreq/scaling_cur_freq");
             let Some(khz) = optional(&path) else { continue };
             #[expect(
@@ -286,7 +270,7 @@ impl Cpu {
 
     fn idle(&mut self, elapsed: Duration) -> Option<Device> {
         let mut residency: Vec<(String, PathBuf, u64)> = Vec::new();
-        for (_, dir) in self.cpus() {
+        for (_, dir) in cpus(&self.sys) {
             let Ok(states) = fs::read_dir(dir.join("cpuidle")) else {
                 continue;
             };
@@ -308,8 +292,7 @@ impl Cpu {
         if residency.is_empty() {
             return None;
         }
-        let threads = self
-            .cpus()
+        let threads = cpus(&self.sys)
             .iter()
             .filter(|(_, dir)| dir.join("cpuidle").exists())
             .count()
@@ -346,15 +329,9 @@ impl Cpu {
 
     fn throttling(&self) -> Option<Device> {
         let mut readings: Vec<Reading> = Vec::new();
-        for (index, dir) in self.cpus() {
+        for Core { dir, id: core } in cores(&self.sys) {
             let throttle = dir.join("thermal_throttle");
             if !throttle.exists() {
-                continue;
-            }
-            let first_sibling = text(&dir.join("topology/thread_siblings_list"))
-                .ok()
-                .and_then(|list| list.split([',', '-']).next()?.parse::<u32>().ok());
-            if first_sibling.is_some_and(|first| first != index) {
                 continue;
             }
             if readings.is_empty() {
@@ -371,7 +348,6 @@ impl Cpu {
                     ));
                 }
             }
-            let core = text(&dir.join("topology/core_id")).unwrap_or_else(|_| index.to_string());
             readings.push(throttle_reading(
                 &throttle,
                 "core_throttle_count",
