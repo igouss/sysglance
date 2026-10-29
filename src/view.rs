@@ -10,12 +10,12 @@ use gpui::{
     size,
 };
 use gpui_component::{
-    ActiveTheme, Root, Theme, ThemeMode,
+    ActiveTheme, Root,
     scroll::{Scrollbar, ScrollbarMode},
 };
 use model::{Card, PADDING, Section, sections, summary};
 use sysglance_core::{history::History, reading::Value};
-use theme::Palette;
+use theme::{Palette, follow_omarchy};
 
 use crate::{
     bench::Bench,
@@ -296,7 +296,7 @@ impl Render for Dashboard {
 pub fn run(shared: Shared, bench: bool) {
     gpui_platform::application().run(move |cx: &mut App| {
         gpui_component::init(cx);
-        Theme::change(ThemeMode::Dark, None, cx);
+        follow_omarchy(cx);
         let bounds = Bounds::centered(None, size(px(1720.0), px(1000.0)), cx);
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),

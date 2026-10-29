@@ -1,5 +1,6 @@
 mod bench;
 mod layout;
+mod omarchy;
 mod sampler;
 mod sources;
 mod spark;

@@ -22,6 +22,24 @@ sysglance shows every sensor and counter this machine exposes in one GPUI window
 - **Wayland only.** Force: Omarchy runs Hyprland, which has no X11 session, so X11 code is dead weight in the binary. Every GPUI crate is built with `default-features = false, features = ["wayland"]`. Gate: `scripts/wayland-only.sh` fails when any X11 crate (`x11`, `x11rb`, `xcb`, `xim`, ...) is in the resolved dependency tree. It goes red when `x11` is enabled.
 - **Every commit passes the gate as committed.** Force: a check of the working tree passes a commit that leaves a needed change unstaged. The pre-commit hook runs `scripts/check-snapshot.sh`, which exports the index to a temp dir and runs `scripts/check.sh` there. `scripts/check-snapshot.sh <rev>` checks any past commit the same way.
 
+## Theme
+
+The window follows the Omarchy theme. `src/omarchy.rs` reads `$XDG_STATE_HOME/omarchy/current/theme/colors.toml` (default `~/.local/state`), and `src/view/theme.rs` checks it every second and applies it on change, so `omarchy-theme-set` recolours the open window within a second. The font is `omarchy-font-current`'s.
+
+`colors.toml` keys mean different things in light and dark themes (`light_foreground` is the strong text colour in a light theme, and `white`'s `lighter_background` is darker than its background), so the mapping depends on `mode`:
+
+| sysglance | dark theme | light theme |
+|---|---|---|
+| window | `background` | `background` |
+| card | `lighter_background` | `dark_background` |
+| border | `selection` | `selection` |
+| text | `foreground` | `foreground` |
+| labels | `light_foreground` | `light_foreground` |
+| faint text | `dark_foreground` | `dark_foreground` |
+| normal / low / high / critical | `green` / `blue` / `yellow` / `red` | same |
+
+Without an Omarchy theme the window uses gpui-component's dark theme. Gate: `src/omarchy/tests.rs`; `cargo test omarchy -- --ignored` parses every theme under `/usr/share/omarchy/themes`.
+
 ## Frame time
 
 `sysglance --bench-scroll` scrolls the view 37 px every frame for 900 frames, then prints fps, frame-time percentiles and main-thread CPU per frame, and exits. Use main-thread CPU per frame to compare changes: wall-clock fps on this machine swings between 25 and 56 fps on identical code with the background load, while CPU time per frame holds still. On 2026-10-29, with the load average around 9, it read 60.0 fps, p99 18 ms and 3.5–4.1 ms of main-thread CPU per frame, against 8–11 ms before cards were painted.
