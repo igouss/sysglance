@@ -213,10 +213,18 @@ fn identity(dir: &Path, name: &str) -> (Category, String, String) {
             (Category::Graphics, format!("GPU ({name})"))
         }
         "acpitz" => (Category::Board, "ACPI thermal zone".to_owned()),
-        chip if chip.starts_with("nct") || chip.starts_with("it8") || chip.starts_with("w83") => (
-            Category::Board,
-            format!("Super I/O {}", chip.to_uppercase()),
-        ),
+        chip if ["nct", "it8", "w83", "f71", "f81"]
+            .iter()
+            .any(|prefix| chip.starts_with(prefix)) =>
+        {
+            (
+                Category::Board,
+                format!("Super I/O {}", chip.to_uppercase()),
+            )
+        }
+        "asus_ec_sensors" | "asus-ec-sensors" | "asus_wmi_sensors" | "dell_smm" | "thinkpad"
+        | "applesmc" | "hp" => (Category::Board, format!("Embedded controller ({name})")),
+        chip if chip.starts_with("BAT") => (Category::Power, format!("Battery {chip}")),
         chip if chip.starts_with("iwlwifi") => (Category::Network, "Wi-Fi radio".to_owned()),
         chip => (Category::System, chip.to_owned()),
     };

@@ -464,3 +464,42 @@ fn a_reading_names_the_file_it_came_from() {
         root.path().join("hwmon0/temp1_input").display().to_string()
     );
 }
+
+fn titled(name: &str) -> (Category, String) {
+    let root = TempDir::new().unwrap();
+    chip(
+        root.path(),
+        "hwmon0",
+        &[("name", &format!("{name}\n")), ("temp1_input", "1000\n")],
+    );
+    let devices = collect(root.path());
+    (only(&devices).category, only(&devices).title.clone())
+}
+
+#[test]
+fn a_fintek_chip_is_the_boards_super_io() {
+    assert_eq!(
+        titled("f71882fg"),
+        (Category::Board, "Super I/O F71882FG".to_owned())
+    );
+}
+
+#[test]
+fn a_laptop_or_board_embedded_controller_is_the_board() {
+    assert_eq!(
+        titled("thinkpad"),
+        (Category::Board, "Embedded controller (thinkpad)".to_owned())
+    );
+    assert_eq!(
+        titled("asus_ec_sensors"),
+        (
+            Category::Board,
+            "Embedded controller (asus_ec_sensors)".to_owned()
+        )
+    );
+}
+
+#[test]
+fn a_battery_is_power() {
+    assert_eq!(titled("BAT0"), (Category::Power, "Battery BAT0".to_owned()));
+}
