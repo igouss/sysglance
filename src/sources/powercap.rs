@@ -50,10 +50,12 @@ impl Powercap {
         else {
             return Value::Unavailable(Unavailable::Pending);
         };
-        let tdp = watts(&zone.join("constraint_0_max_power_uw"));
+        let pl1 = watts(&zone.join("constraint_0_power_limit_uw"))
+            .filter(|limit| *limit > 0.0 && *limit < UNLIMITED_WATTS);
+        let rated = pl1.or_else(|| watts(&zone.join("constraint_0_max_power_uw")));
         Value::measured(
             Measure::Watts(microwatts / 1e6),
-            Limits::new(None, tdp, None),
+            Limits::new(None, rated, None),
             Alarms::default(),
         )
     }
@@ -149,7 +151,11 @@ impl Source for Powercap {
                 readings.extend(constraints(&zone, &key));
                 devices.push(Device {
                     key,
-                    title: format!("RAPL {name}"),
+                    title: if directory.starts_with("intel-rapl-mmio") {
+                        format!("RAPL {name} (MMIO)")
+                    } else {
+                        format!("RAPL {name}")
+                    },
                     detail: format!("powercap {directory}"),
                     category: Category::Power,
                     readings,

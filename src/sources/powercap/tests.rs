@@ -186,3 +186,42 @@ fn a_zero_tdp_is_not_shown() {
     let devices = Powercap::new(root.path()).collect(SECOND);
     assert_eq!(labels(&devices[0]), ["package-0 power"]);
 }
+
+const LAPTOP: [(&str, &str); 3] = [
+    ("constraint_0_name", "long_term\n"),
+    ("constraint_0_power_limit_uw", "25000000\n"),
+    ("constraint_0_max_power_uw", "15000000\n"),
+];
+
+#[test]
+fn an_enforced_long_term_limit_rates_power_instead_of_tdp() {
+    let root = TempDir::new().unwrap();
+    zone(root.path(), "intel-rapl:0", "package-0", 0, &LAPTOP);
+    let mut source = Powercap::new(root.path());
+    source.collect(SECOND);
+    energy(root.path(), "intel-rapl:0", 20_000_000);
+    let below = source.collect(SECOND);
+    assert_eq!(
+        measured(&below[0].readings[0].value),
+        (Measure::Watts(20.0), Level::Normal)
+    );
+    energy(root.path(), "intel-rapl:0", 46_000_000);
+    let at_limit = source.collect(SECOND);
+    assert_eq!(
+        measured(&at_limit[0].readings[0].value),
+        (Measure::Watts(26.0), Level::High)
+    );
+}
+
+#[test]
+fn the_mmio_zone_is_titled_apart_from_the_msr_zone() {
+    let root = TempDir::new().unwrap();
+    zone(root.path(), "intel-rapl:0", "package-0", 0, &[]);
+    zone(root.path(), "intel-rapl-mmio:0", "package-0", 0, &[]);
+    let titles: Vec<String> = Powercap::new(root.path())
+        .collect(SECOND)
+        .into_iter()
+        .map(|device| device.title)
+        .collect();
+    assert_eq!(titles, ["RAPL package-0 (MMIO)", "RAPL package-0"]);
+}
