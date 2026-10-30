@@ -1,7 +1,9 @@
 use std::{
-    fs,
+    fs, io,
     os::unix::fs::{FileExt, PermissionsExt},
     path::Path,
+    process::Command,
+    thread,
     time::Duration,
 };
 
@@ -118,6 +120,15 @@ fn fake_smartctl(dir: &Path, body: &str) -> String {
     let path = dir.join("smartctl");
     fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("script");
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("executable");
+    let busy = || {
+        Command::new(&path)
+            .arg("--probe")
+            .output()
+            .is_err_and(|e| e.kind() == io::ErrorKind::ExecutableFileBusy)
+    };
+    (0..100)
+        .take_while(|_| busy())
+        .for_each(|_| thread::sleep(Duration::from_millis(10)));
     path.display().to_string()
 }
 
