@@ -2,7 +2,10 @@ use std::{fs, io::Cursor, path::Path, sync::Mutex};
 
 use sysglance_core::{
     measure::Measure,
-    msr::{PACKAGE_RESIDENCY, PLATFORM_INFO, SMI_COUNT, TSC, TURBO_RATIO_LIMIT},
+    msr::{
+        PACKAGE_RESIDENCY, PERF_STATUS, PLATFORM_INFO, SMI_COUNT, TEMPERATURE_TARGET, TSC,
+        TURBO_RATIO_LIMIT,
+    },
     reading::{Device, Unavailable, Value},
 };
 use tempfile::TempDir;
@@ -263,12 +266,20 @@ fn a_ladder_of_one_ratio_per_core_count_names_each_count() {
 }
 
 #[test]
-fn an_empty_ladder_says_none() {
-    let latest = Registers::from([((0, TURBO_RATIO_LIMIT), 0)]);
+fn registers_that_read_zero_are_left_out() {
+    let latest = Registers::from([
+        ((0, TURBO_RATIO_LIMIT), 0),
+        ((0, PERF_STATUS), 0),
+        ((0, TEMPERATURE_TARGET), 0),
+        ((0, SMI_COUNT), 5),
+        ((0, PLATFORM_INFO), 0),
+    ]);
     let sys = topology(1, 1);
     let found = devices(sys.path(), None, &latest);
-    assert_eq!(
-        value(device(&found, "msr:package"), "msr:package/turbo"),
-        &text("none")
-    );
+    let keys: Vec<&str> = device(&found, "msr:package")
+        .readings
+        .iter()
+        .map(|r| r.key.as_str())
+        .collect();
+    assert_eq!(keys, Vec::<&str>::new());
 }

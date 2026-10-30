@@ -77,11 +77,7 @@ fn ladder(ratios: &[u64]) -> Value {
         runs.push(format!("{cores}:{:.1}", ratio_hz(run[0]) / 1e9));
         first = last + 1;
     }
-    Value::Text(if runs.is_empty() {
-        "none".to_owned()
-    } else {
-        format!("{} GHz", runs.join(" "))
-    })
+    Value::Text(format!("{} GHz", runs.join(" ")))
 }
 
 fn pair(previous: Option<&Registers>, latest: &Registers, at: (u32, u32)) -> Option<(u64, u64)> {
@@ -130,6 +126,7 @@ fn package(previous: Option<&Registers>, latest: &Registers) -> Device {
         });
     };
     let at = |address: u32| latest.get(&(PACKAGE_CPU, address)).copied();
+    let set = |address: u32| at(address).filter(|raw| *raw != 0);
     if let Some(raw) = at(CORE_PERF_LIMIT_REASONS) {
         let address = CORE_PERF_LIMIT_REASONS;
         let now = named(&flags(raw, &LIMIT_REASONS, 0));
@@ -144,11 +141,11 @@ fn package(previous: Option<&Registers>, latest: &Registers) -> Device {
         push(address, "thermal/now", "thermal events", now);
         push(address, "thermal/logged", "thermal since boot", logged);
     }
-    if let Some(raw) = at(PERF_STATUS) {
+    if let Some(raw) = set(PERF_STATUS) {
         let volts = Value::plain(Measure::Volts(core_volts(raw)));
         push(PERF_STATUS, "vid", "core voltage (VID)", volts);
     }
-    if let Some(raw) = at(TEMPERATURE_TARGET) {
+    if let Some(raw) = set(TEMPERATURE_TARGET) {
         #[expect(
             clippy::cast_precision_loss,
             reason = "an 8-bit temperature is exact in an f64"
@@ -162,11 +159,11 @@ fn package(previous: Option<&Registers>, latest: &Registers) -> Device {
             celsius(tcc_offset(raw)),
         );
     }
-    if let Some(raw) = at(TURBO_RATIO_LIMIT) {
+    if let Some(raw) = set(TURBO_RATIO_LIMIT) {
         let ladder = ladder(&turbo_ratios(raw));
         push(TURBO_RATIO_LIMIT, "turbo", "turbo by cores", ladder);
     }
-    if at(SMI_COUNT).is_some() {
+    if at(SMI_COUNT).is_some() && at(PLATFORM_INFO).is_some_and(|raw| base_ratio(raw) != 0) {
         push(SMI_COUNT, "smi", "SMIs", smi_rate(previous, latest));
     }
     if let Some(raw) = at(PKG_CST_CONFIG_CONTROL) {
