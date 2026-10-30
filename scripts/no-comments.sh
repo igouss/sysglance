@@ -15,6 +15,6 @@ while IFS= read -r -d '' file; do
     fi
 done < <(find . -path ./target -prune -o \( -name '*.toml' -o -name '*.sh' -o -name '*.rules' \) -print0)
 if [ "$found" -ne 0 ]; then
-    echo "no-comments: code carries no comments; the why goes in docs/ (cm-k7c)" >&2
+    echo "no-comments: code carries no comments; the why goes in docs/" >&2
     exit 1
 fi

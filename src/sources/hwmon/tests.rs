@@ -327,7 +327,7 @@ fn files_that_are_not_channels_are_skipped() {
 }
 
 #[test]
-#[ignore = "reads this machine's /sys and runs `sensors -j`"]
+#[ignore = "reads the running machine's /sys and runs `sensors -j`"]
 fn live_readings_agree_with_lm_sensors() {
     let output = std::process::Command::new("sensors")
         .arg("-j")
