@@ -125,7 +125,7 @@ impl Painter<'_> {
         } else {
             palette.level(row.level)
         };
-        if row.text {
+        if row.text || row.unavailable {
             self.text(&row.label, &palette.sans, palette.muted, line, Align::Left);
             let label = self.width(&row.label, &palette.sans) + px(SPACING);
             let value = Bounds::new(
