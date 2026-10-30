@@ -6,7 +6,7 @@ use sysglance_core::{
 };
 use tempfile::TempDir;
 
-use super::{Memory, table};
+use super::{Memory, page_size, table};
 use crate::sources::Source;
 
 const SECOND: Duration = Duration::from_secs(1);
@@ -179,5 +179,43 @@ fn an_empty_zram_has_ratio_zero() {
     assert_eq!(
         measure(value(&collect(root.path()), "memory:zram0/ratio")),
         Measure::Scalar(0.0)
+    );
+}
+
+fn auxv(pairs: &[(usize, usize)]) -> Vec<u8> {
+    pairs
+        .iter()
+        .flat_map(|(key, value)| [key.to_ne_bytes(), value.to_ne_bytes()].concat())
+        .collect()
+}
+
+#[test]
+fn the_page_size_is_the_auxiliary_vectors_entry_6() {
+    assert_eq!(
+        page_size(&auxv(&[(33, 7), (6, 16384), (0, 0)])),
+        Some(16384)
+    );
+}
+
+#[test]
+fn an_auxiliary_vector_without_a_page_size_has_none() {
+    assert_eq!(page_size(&auxv(&[(33, 7), (0, 0)])), None);
+    assert_eq!(page_size(&[]), None);
+}
+
+#[test]
+fn swapping_scales_by_the_page_size_of_this_kernel() {
+    let root = TempDir::new().unwrap();
+    write(root.path(), "proc/self/auxv", "");
+    fs::write(root.path().join("proc/self/auxv"), auxv(&[(6, 65536)])).unwrap();
+    write(root.path(), "proc/meminfo", MEMINFO);
+    write(root.path(), "proc/vmstat", "pswpin 0\npswpout 0\n");
+    let mut memory = Memory::new(root.path().join("proc"), root.path().join("sys"));
+    memory.collect(SECOND);
+    write(root.path(), "proc/vmstat", "pswpin 2\npswpout 0\n");
+    let devices = memory.collect(SECOND);
+    assert_eq!(
+        measure(value(&devices, "memory:ram/pswpin")),
+        Measure::BytesPerSecond(131_072.0)
     );
 }

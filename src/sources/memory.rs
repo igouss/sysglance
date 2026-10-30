@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, time::Duration};
+use std::{collections::HashMap, fs, path::PathBuf, time::Duration};
 
 use sysglance_core::{
     counter::{Wrap, per_second},
@@ -8,7 +8,20 @@ use sysglance_core::{
 
 use super::{Source, origin, text};
 
-const PAGE: f64 = 4096.0;
+const AT_PAGESZ: u64 = 6;
+const DEFAULT_PAGE: u64 = 4096;
+const WORD: usize = size_of::<usize>();
+
+pub fn page_size(auxv: &[u8]) -> Option<u64> {
+    let word = |bytes: &[u8]| -> Option<u64> {
+        let array: [u8; WORD] = bytes.try_into().ok()?;
+        u64::try_from(usize::from_ne_bytes(array)).ok()
+    };
+    auxv.as_chunks::<{ 2 * WORD }>().0.iter().find_map(|pair| {
+        let (key, value) = pair.split_at(WORD);
+        (word(key)? == AT_PAGESZ).then(|| word(value)).flatten()
+    })
+}
 
 pub fn table(content: &str) -> HashMap<&str, u64> {
     content
@@ -24,13 +37,25 @@ pub fn table(content: &str) -> HashMap<&str, u64> {
 pub struct Memory {
     proc: PathBuf,
     sys: PathBuf,
+    page: f64,
     counters: HashMap<&'static str, u64>,
 }
 
 impl Memory {
     pub fn new(proc: impl Into<PathBuf>, sys: impl Into<PathBuf>) -> Self {
+        let proc = proc.into();
+        let page = fs::read(proc.join("self/auxv"))
+            .ok()
+            .and_then(|auxv| page_size(&auxv))
+            .unwrap_or(DEFAULT_PAGE);
+        #[expect(
+            clippy::cast_precision_loss,
+            reason = "page sizes are small powers of two"
+        )]
+        let page = page as f64;
         Self {
-            proc: proc.into(),
+            proc,
+            page,
             sys: sys.into(),
             counters: HashMap::new(),
         }
@@ -93,8 +118,8 @@ impl Memory {
             let vmstat = table(&content);
             let source = origin(&path);
             for (name, label, scale) in [
-                ("pswpin", "swapped in", PAGE),
-                ("pswpout", "swapped out", PAGE),
+                ("pswpin", "swapped in", self.page),
+                ("pswpout", "swapped out", self.page),
                 ("pgmajfault", "major faults", 1.0),
                 ("pgfault", "page faults", 1.0),
             ] {
@@ -163,7 +188,7 @@ impl Memory {
     }
 
     fn zram(&self) -> Vec<Device> {
-        let Ok(entries) = std::fs::read_dir(self.sys.join("block")) else {
+        let Ok(entries) = fs::read_dir(self.sys.join("block")) else {
             return Vec::new();
         };
         let mut names: Vec<String> = entries
