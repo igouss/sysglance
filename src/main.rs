@@ -6,7 +6,7 @@ mod sources;
 mod spark;
 mod view;
 
-use std::time::Duration;
+use std::{path::Path, time::Duration};
 
 use sources::{
     Source,
@@ -27,7 +27,7 @@ fn main() {
         Box::new(Hwmon::new("/sys/class/hwmon")),
         Box::new(Pressure::new("/proc/pressure")),
         Box::new(Spd::new("/sys/bus/i2c/devices")),
-        Box::new(Helper::spawn(&helper::COMMAND, "/proc", "/sys")),
+        Box::new(Helper::spawn(Path::new(helper::INSTALLED), "/proc", "/sys")),
     ];
     let bench = std::env::args().any(|argument| argument == "--bench-scroll");
     view::run(sampler::spawn(sources, Duration::from_secs(1)), bench);

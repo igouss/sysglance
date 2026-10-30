@@ -5,6 +5,18 @@ use sysglance_core::{
 };
 
 use super::device;
+use crate::sources::helper::Drive;
+
+fn drive(path: &str) -> Drive {
+    Drive {
+        path: path.to_owned(),
+        kind: "sat".to_owned(),
+    }
+}
+
+fn report(path: &str, json: &str) -> Device {
+    device(&drive(path), Ok(json))
+}
 
 const NVME: &str = include_str!("nvme-sn850x.json");
 const SATA: &str = include_str!("sata-850-evo.json");
@@ -13,7 +25,7 @@ fn reading<'a>(device: &'a Device, key: &str) -> &'a sysglance_core::reading::Re
     device
         .readings
         .iter()
-        .find(|r| r.key == format!("smart:/dev/x/{key}"))
+        .find(|r| r.key == format!("smart:/dev/x sat/{key}"))
         .unwrap_or_else(|| panic!("no {key} in {:?}", device.readings))
 }
 
@@ -29,17 +41,17 @@ fn measure(value: &Value) -> Measure {
 }
 
 fn nvme() -> Device {
-    device("/dev/x", NVME)
+    report("/dev/x", NVME)
 }
 
 fn sata() -> Device {
-    device("/dev/x", SATA)
+    report("/dev/x", SATA)
 }
 
 #[test]
 fn a_drive_is_titled_by_its_model_and_detailed_by_path_protocol_and_firmware() {
-    let drive = device("/dev/nvme0", NVME);
-    assert_eq!(drive.key, "smart:/dev/nvme0");
+    let drive = report("/dev/nvme0", NVME);
+    assert_eq!(drive.key, "smart:/dev/nvme0 sat");
     assert_eq!(drive.title, "WD_BLACK SN850X HS 2000GB");
     assert_eq!(
         drive.detail,
@@ -57,7 +69,7 @@ fn a_passing_drive_is_healthy() {
 
 #[test]
 fn a_failing_drive_is_critical() {
-    let drive = device("/dev/x", r#"{"smart_status":{"passed":false}}"#);
+    let drive = report("/dev/x", r#"{"smart_status":{"passed":false}}"#);
     let health = value(&drive, "health");
     assert_eq!(measure(health), Measure::Tripped(true));
     assert_eq!(health.level(), Level::Critical);
@@ -106,7 +118,7 @@ fn spare_is_rated_against_the_drives_own_threshold() {
     let ample = value(&drive, "spare");
     assert_eq!(measure(ample), Measure::Fraction(1.0));
     assert_eq!(ample.level(), Level::Normal);
-    let low = device(
+    let low = report(
         "/dev/x",
         r#"{"spare_available":{"current_percent":10,"threshold_percent":10}}"#,
     );
@@ -119,7 +131,7 @@ fn endurance_is_high_only_once_the_rated_life_is_used() {
     let worn = value(&drive, "endurance");
     assert_eq!(measure(worn), Measure::Fraction(0.99));
     assert_eq!(worn.level(), Level::Normal);
-    let spent = device("/dev/x", r#"{"endurance_used":{"current_percent":100}}"#);
+    let spent = report("/dev/x", r#"{"endurance_used":{"current_percent":100}}"#);
     assert_eq!(value(&spent, "endurance").level(), Level::High);
 }
 
@@ -134,7 +146,7 @@ fn no_critical_warning_is_normal() {
 
 #[test]
 fn a_critical_warning_is_critical_and_names_its_bits() {
-    let drive = device(
+    let drive = report(
         "/dev/x",
         r#"{"nvme_smart_health_information_log":{"critical_warning":5}}"#,
     );
@@ -176,7 +188,7 @@ fn every_ata_attribute_becomes_a_row() {
 
 #[test]
 fn an_attribute_failing_now_is_critical_and_one_failed_in_the_past_is_high() {
-    let drive = device(
+    let drive = report(
         "/dev/x",
         r#"{"ata_smart_attributes":{"table":[
             {"id":5,"name":"a","value":5,"worst":5,"thresh":10,"when_failed":"now","raw":{"string":"900"}},
@@ -197,22 +209,73 @@ fn an_error_log_entry_does_not_make_the_report_unreadable() {
 
 #[test]
 fn a_drive_that_could_not_be_opened_says_why() {
-    let drive = device(
+    let drive = report(
         "/dev/x",
-        r#"{"smartctl":{"exit_status":2,"messages":[{"string":"Device is in STANDBY mode, exit(2)","severity":"information"}]}}"#,
+        r#"{"smartctl":{"exit_status":2,"messages":[{"string":"Smartctl open device: /dev/x failed: No such device","severity":"error"}]}}"#,
     );
     assert_eq!(drive.readings.len(), 1);
     assert_eq!(
         value(&drive, "smart"),
         &Value::Unavailable(Unavailable::Unreadable(
-            "Device is in STANDBY mode, exit(2)".to_owned()
+            "Smartctl open device: /dev/x failed: No such device".to_owned()
         ))
     );
 }
 
 #[test]
+fn a_sleeping_drive_says_it_was_not_woken() {
+    let message = "Device is in STANDBY mode, exit(2)";
+    let drive = report(
+        "/dev/x",
+        &format!(
+            r#"{{"smartctl":{{"exit_status":2,"messages":[{{"string":"{message}","severity":"information"}}]}}}}"#
+        ),
+    );
+    let row = reading(&drive, "smart");
+    assert_eq!(row.value, Value::Text("asleep, not woken".to_owned()));
+    assert_eq!(row.origin, message);
+}
+
+#[test]
+fn a_drive_without_smart_is_not_supported() {
+    let drive = report("/dev/x", r#"{"smart_support":{"available":false}}"#);
+    assert_eq!(
+        value(&drive, "smart"),
+        &Value::Unavailable(Unavailable::NotSupported)
+    );
+}
+
+#[test]
+fn a_report_the_helper_could_not_get_says_why() {
+    let drive = device(&drive("/dev/x"), Err("smartctl gave no answer within 20 s"));
+    assert_eq!(drive.title, "/dev/x");
+    assert_eq!(
+        value(&drive, "smart"),
+        &Value::Unavailable(Unavailable::Unreadable(
+            "smartctl gave no answer within 20 s".to_owned()
+        ))
+    );
+}
+
+#[test]
+fn drives_behind_one_controller_are_told_apart_by_type() {
+    let first = Drive {
+        path: "/dev/bus/0".to_owned(),
+        kind: "megaraid,0".to_owned(),
+    };
+    let second = Drive {
+        kind: "megaraid,1".to_owned(),
+        ..first.clone()
+    };
+    let one = device(&first, Ok("{}"));
+    let two = device(&second, Ok("{}"));
+    assert_ne!(one.key, two.key);
+    assert_eq!(two.detail, "SMART · /dev/bus/0 megaraid,1 · unknown");
+}
+
+#[test]
 fn an_unreadable_report_without_a_message_names_the_exit_status() {
-    let drive = device("/dev/x", r#"{"smartctl":{"exit_status":4}}"#);
+    let drive = report("/dev/x", r#"{"smartctl":{"exit_status":4}}"#);
     assert_eq!(
         value(&drive, "smart"),
         &Value::Unavailable(Unavailable::Unreadable("smartctl exit status 4".to_owned()))
@@ -221,7 +284,7 @@ fn an_unreadable_report_without_a_message_names_the_exit_status() {
 
 #[test]
 fn output_that_is_not_json_is_unreadable_and_titled_by_the_drive() {
-    let drive = device("/dev/x", "smartctl: not found");
+    let drive = report("/dev/x", "smartctl: not found");
     assert_eq!(drive.title, "/dev/x");
     assert_eq!(drive.detail, "SMART · /dev/x · unknown");
     assert_eq!(
@@ -234,5 +297,18 @@ fn output_that_is_not_json_is_unreadable_and_titled_by_the_drive() {
 
 #[test]
 fn an_empty_report_has_no_rows() {
-    assert_eq!(device("/dev/x", "{}").readings, vec![]);
+    assert_eq!(report("/dev/x", "{}").readings, vec![]);
+}
+
+#[test]
+fn an_open_failure_that_mentions_a_mode_is_not_sleep() {
+    let message = "Read Device Identity failed: unsupported scsi mode page";
+    let drive = report(
+        "/dev/x",
+        &format!(r#"{{"smartctl":{{"exit_status":2,"messages":[{{"string":"{message}"}}]}}}}"#),
+    );
+    assert_eq!(
+        value(&drive, "smart"),
+        &Value::Unavailable(Unavailable::Unreadable(message.to_owned()))
+    );
 }

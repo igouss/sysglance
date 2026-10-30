@@ -5,6 +5,8 @@ use sysglance_core::{
     reading::{Category, Device, Reading, Unavailable, Value},
 };
 
+use super::helper::Drive;
+
 const UNREADABLE: u64 = 0b111;
 const NVME_DATA_UNIT_BYTES: u64 = 512_000;
 const NVME_CRITICAL_WARNINGS: [(u64, &str); 6] = [
@@ -33,6 +35,7 @@ const fn float(value: u64) -> f64 {
 }
 
 struct Rows<'a> {
+    key: String,
     drive: &'a str,
     readings: Vec<Reading>,
 }
@@ -40,7 +43,7 @@ struct Rows<'a> {
 impl Rows<'_> {
     fn push(&mut self, key: &str, label: &str, value: Value, origin: String) {
         self.readings.push(Reading {
-            key: format!("smart:{}/{key}", self.drive),
+            key: format!("{}/{key}", self.key),
             label: label.to_owned(),
             value,
             origin,
@@ -211,42 +214,100 @@ fn ata(rows: &mut Rows, json: &Json) {
     }
 }
 
-fn unreadable(json: &Json) -> Option<String> {
-    let exit = number(json, "/smartctl/exit_status").unwrap_or(0);
-    (exit & UNREADABLE != 0).then(|| {
-        string(json, "/smartctl/messages/0/string")
-            .map_or_else(|| format!("smartctl exit status {exit}"), str::to_owned)
-    })
+enum Verdict {
+    Readable,
+    Asleep(String),
+    Unreadable(String),
+    Unsupported,
 }
 
-pub fn device(drive: &str, report: &str) -> Device {
+fn verdict(json: &Json) -> Verdict {
+    if !json.is_object() {
+        return Verdict::Unreadable("smartctl output is not JSON".to_owned());
+    }
+    let exit = number(json, "/smartctl/exit_status").unwrap_or(0);
+    if exit & UNREADABLE != 0 {
+        let message = string(json, "/smartctl/messages/0/string");
+        return match message {
+            Some(message) if message.starts_with("Device is in ") && message.contains(" mode") => {
+                Verdict::Asleep(message.to_owned())
+            }
+            Some(message) => Verdict::Unreadable(message.to_owned()),
+            None => Verdict::Unreadable(format!("smartctl exit status {exit}")),
+        };
+    }
+    if json
+        .pointer("/smart_support/available")
+        .and_then(Json::as_bool)
+        == Some(false)
+    {
+        return Verdict::Unsupported;
+    }
+    Verdict::Readable
+}
+
+pub fn unavailable(why: &str) -> Device {
+    Device {
+        key: "smart".to_owned(),
+        title: "SMART".to_owned(),
+        detail: "drive health · sysglance-helper".to_owned(),
+        category: Category::Storage,
+        readings: vec![Reading {
+            key: "smart/status".to_owned(),
+            label: "status".to_owned(),
+            value: Value::Unavailable(Unavailable::Unreadable(why.to_owned())),
+            origin: why.to_owned(),
+        }],
+    }
+}
+
+pub fn device(drive: &Drive, report: Result<&str, &str>) -> Device {
+    let name = if drive.kind.contains(',') {
+        format!("{} {}", drive.path, drive.kind)
+    } else {
+        drive.path.clone()
+    };
     let mut rows = Rows {
-        drive,
+        key: format!("smart:{} {}", drive.path, drive.kind),
+        drive: &name,
         readings: Vec::new(),
     };
-    let json: Json = serde_json::from_str(report).unwrap_or(Json::Null);
-    let why = if json.is_object() {
-        unreadable(&json)
-    } else {
-        Some("smartctl output is not JSON".to_owned())
-    };
-    if let Some(why) = why {
-        let origin = format!("smartctl -a {drive}");
-        let value = Value::Unavailable(Unavailable::Unreadable(why));
-        rows.push("smart", "SMART", value, origin);
-    } else {
-        common(&mut rows, &json);
-        nvme(&mut rows, &json);
-        ata(&mut rows, &json);
+    let json: Json = report
+        .ok()
+        .and_then(|report| serde_json::from_str(report).ok())
+        .unwrap_or(Json::Null);
+    let origin = format!("smartctl -a -d {} {}", drive.kind, drive.path);
+    match report.map(|_| verdict(&json)) {
+        Err(why) => {
+            let value = Value::Unavailable(Unavailable::Unreadable(why.to_owned()));
+            rows.push("smart", "SMART", value, origin);
+        }
+        Ok(Verdict::Unreadable(why)) => {
+            let value = Value::Unavailable(Unavailable::Unreadable(why));
+            rows.push("smart", "SMART", value, origin);
+        }
+        Ok(Verdict::Asleep(message)) => {
+            let value = Value::Text("asleep, not woken".to_owned());
+            rows.push("smart", "SMART", value, message);
+        }
+        Ok(Verdict::Unsupported) => {
+            let value = Value::Unavailable(Unavailable::NotSupported);
+            rows.push("smart", "SMART", value, origin);
+        }
+        Ok(Verdict::Readable) => {
+            common(&mut rows, &json);
+            nvme(&mut rows, &json);
+            ata(&mut rows, &json);
+        }
     }
     let protocol = string(&json, "/device/protocol").unwrap_or("unknown");
     let firmware = string(&json, "/firmware_version")
         .map(|firmware| format!(" · firmware {firmware}"))
         .unwrap_or_default();
     Device {
-        key: format!("smart:{drive}"),
-        title: string(&json, "/model_name").unwrap_or(drive).to_owned(),
-        detail: format!("SMART · {drive} · {protocol}{firmware}"),
+        key: rows.key.clone(),
+        title: string(&json, "/model_name").unwrap_or(&name).to_owned(),
+        detail: format!("SMART · {name} · {protocol}{firmware}"),
         category: Category::Storage,
         readings: rows.readings,
     }

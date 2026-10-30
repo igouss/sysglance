@@ -6,34 +6,72 @@ use std::{
     process::{Command, Stdio},
     sync::{Arc, Mutex, PoisonError},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use sysglance_core::reading::{Category, Device, Reading, Unavailable, Value};
 
 use super::{Source, msr, smart, text};
 
-pub const COMMAND: [&str; 3] = ["sudo", "-n", "/usr/local/libexec/sysglance-helper"];
-pub const GRANT: &str = "run install.sh: it installs sysglance-helper and lets wheel run it";
+pub const INSTALLED: &str = "/usr/local/libexec/sysglance-helper";
+pub const GRANT: &str = "run install.sh: it lets your admin group run sysglance-helper";
+pub const SILENCE: Duration = Duration::from_secs(5);
 
 pub type Registers = BTreeMap<(u32, u32), u64>;
-pub type Reports = BTreeMap<String, String>;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Drive {
+    pub path: String,
+    pub kind: String,
+}
+
+pub type Reports = BTreeMap<Drive, Result<String, String>>;
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub enum Health {
+    #[default]
+    Waiting,
+    Drives(Reports),
+    Unavailable(String),
+}
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Frame {
     pub registers: Registers,
-    pub reports: Reports,
+    pub health: Option<Health>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Line {
-    Register { cpu: u32, address: u32, value: u64 },
-    Report { drive: String, json: String },
+    Register {
+        cpu: u32,
+        address: u32,
+        value: u64,
+    },
+    Round,
+    Report {
+        drive: Drive,
+        report: Result<String, String>,
+    },
+    HealthUnavailable(String),
     End,
 }
 
 fn hex(field: &str) -> Option<u64> {
     u64::from_str_radix(field.strip_prefix("0x")?, 16).ok()
+}
+
+fn report(rest: &str, ok: bool) -> Option<Line> {
+    let (path, rest) = rest.split_once(' ')?;
+    let (kind, body) = rest.split_once(' ')?;
+    let body = body.to_owned();
+    Some(Line::Report {
+        drive: Drive {
+            path: path.to_owned(),
+            kind: kind.to_owned(),
+        },
+        report: if ok { Ok(body) } else { Err(body) },
+    })
 }
 
 pub fn parse(line: &str) -> Option<Line> {
@@ -50,13 +88,10 @@ pub fn parse(line: &str) -> Option<Line> {
                 value,
             })
         }
-        "smart" => {
-            let (drive, json) = rest.split_once(' ')?;
-            Some(Line::Report {
-                drive: drive.to_owned(),
-                json: json.to_owned(),
-            })
-        }
+        "smart-round" if rest.is_empty() => Some(Line::Round),
+        "smart" => report(rest, true),
+        "smart-error" => report(rest, false),
+        "smart-unavailable" if !rest.is_empty() => Some(Line::HealthUnavailable(rest.to_owned())),
         "end" if rest.is_empty() => Some(Line::End),
         _ => None,
     }
@@ -69,7 +104,7 @@ pub enum Link {
     Streaming {
         previous: Option<Registers>,
         latest: Registers,
-        reports: Reports,
+        health: Health,
     },
     Refused(String),
     Lost(String),
@@ -86,55 +121,73 @@ pub fn evolve(link: Link, event: Event) -> Link {
         (Link::Starting, Event::Read(frame)) => Link::Streaming {
             previous: None,
             latest: frame.registers,
-            reports: frame.reports,
+            health: frame.health.unwrap_or_default(),
         },
-        (
-            Link::Streaming {
-                latest,
-                mut reports,
-                ..
-            },
-            Event::Read(frame),
-        ) => {
-            reports.extend(frame.reports);
-            Link::Streaming {
-                previous: Some(latest),
-                latest: frame.registers,
-                reports,
-            }
-        }
+        (Link::Streaming { latest, health, .. }, Event::Read(frame)) => Link::Streaming {
+            previous: Some(latest),
+            latest: frame.registers,
+            health: frame.health.unwrap_or(health),
+        },
         (Link::Starting, Event::Ended(why)) => Link::Refused(why),
         (Link::Streaming { .. }, Event::Ended(why)) => Link::Lost(why),
         (ended @ (Link::Refused(_) | Link::Lost(_)), Event::Read(_) | Event::Ended(_)) => ended,
     }
 }
 
-fn advance(link: &Mutex<Link>, event: Event) {
-    let mut guard = link.lock().unwrap_or_else(PoisonError::into_inner);
-    *guard = evolve(mem::take(&mut *guard), event);
+#[derive(Debug)]
+pub struct Watched {
+    pub link: Link,
+    pub heard: Instant,
 }
 
-pub fn frames(reader: impl BufRead, link: &Mutex<Link>) {
-    let mut frame = Frame::default();
-    for line in reader.lines().map_while(Result::ok) {
-        match parse(&line) {
-            Some(Line::Register {
-                cpu,
-                address,
-                value,
-            }) => {
-                frame.registers.insert((cpu, address), value);
-            }
-            Some(Line::Report { drive, json }) => {
-                frame.reports.insert(drive, json);
-            }
-            Some(Line::End) => advance(link, Event::Read(mem::take(&mut frame))),
-            None => {}
+impl Watched {
+    pub fn new(link: Link) -> Self {
+        Self {
+            link,
+            heard: Instant::now(),
         }
     }
 }
 
-pub fn run(command: &[String], link: &Mutex<Link>) -> String {
+fn advance(watched: &Mutex<Watched>, event: Event) {
+    let mut guard = watched.lock().unwrap_or_else(PoisonError::into_inner);
+    if matches!(event, Event::Read(_)) {
+        guard.heard = Instant::now();
+    }
+    guard.link = evolve(mem::take(&mut guard.link), event);
+}
+
+fn add(frame: &mut Frame, line: Line) -> bool {
+    match line {
+        Line::Register {
+            cpu,
+            address,
+            value,
+        } => {
+            frame.registers.insert((cpu, address), value);
+        }
+        Line::Round => frame.health = Some(Health::Drives(Reports::new())),
+        Line::Report { drive, report } => {
+            if let Some(Health::Drives(reports)) = &mut frame.health {
+                reports.insert(drive, report);
+            }
+        }
+        Line::HealthUnavailable(why) => frame.health = Some(Health::Unavailable(why)),
+        Line::End => return true,
+    }
+    false
+}
+
+pub fn frames(reader: impl BufRead, watched: &Mutex<Watched>) {
+    let mut frame = Frame::default();
+    for line in reader.lines().map_while(Result::ok) {
+        if parse(&line).is_some_and(|line| add(&mut frame, line)) {
+            advance(watched, Event::Read(mem::take(&mut frame)));
+        }
+    }
+}
+
+pub fn run(command: &[String], watched: &Mutex<Watched>) -> String {
     let Some((program, arguments)) = command.split_first() else {
         return "no helper command".to_owned();
     };
@@ -149,7 +202,7 @@ pub fn run(command: &[String], link: &Mutex<Link>) -> String {
         Err(e) => return format!("{program}: {e}"),
     };
     if let Some(stdout) = child.stdout.take() {
-        frames(BufReader::new(stdout), link);
+        frames(BufReader::new(stdout), watched);
     }
     let mut stderr = String::new();
     if let Some(mut pipe) = child.stderr.take() {
@@ -165,23 +218,36 @@ pub fn run(command: &[String], link: &Mutex<Link>) -> String {
 }
 
 pub struct Helper {
-    link: Arc<Mutex<Link>>,
+    watched: Arc<Mutex<Watched>>,
     command: String,
     registers_decodable: bool,
     sys: PathBuf,
 }
 
 impl Helper {
-    pub fn spawn(command: &[&str], proc: impl AsRef<Path>, sys: impl Into<PathBuf>) -> Self {
-        let link: Arc<Mutex<Link>> = Arc::default();
-        let shared = Arc::clone(&link);
-        let owned: Vec<String> = command.iter().map(|part| (*part).to_owned()).collect();
-        thread::spawn(move || {
-            let why = run(&owned, &shared);
-            advance(&shared, Event::Ended(why));
-        });
+    pub fn spawn(helper: &Path, proc: impl AsRef<Path>, sys: impl Into<PathBuf>) -> Self {
+        let command: Vec<String> = vec![
+            "sudo".to_owned(),
+            "-n".to_owned(),
+            helper.display().to_string(),
+        ];
+        let watched = if helper.is_file() {
+            let watched = Arc::new(Mutex::new(Watched::new(Link::Starting)));
+            let shared = Arc::clone(&watched);
+            let owned = command.clone();
+            thread::spawn(move || {
+                let why = run(&owned, &shared);
+                advance(&shared, Event::Ended(why));
+            });
+            watched
+        } else {
+            Arc::new(Mutex::new(Watched::new(Link::Refused(format!(
+                "{} is not installed",
+                helper.display()
+            )))))
+        };
         Self {
-            link,
+            watched,
             command: command.join(" "),
             registers_decodable: text(&proc.as_ref().join("cpuinfo"))
                 .is_ok_and(|cpuinfo| msr::decodable(&cpuinfo)),
@@ -208,12 +274,48 @@ impl Helper {
             }],
         }]
     }
+
+    fn streaming(
+        &self,
+        previous: Option<&Registers>,
+        latest: &Registers,
+        health: &Health,
+    ) -> Vec<Device> {
+        let mut devices = if self.registers_decodable {
+            msr::devices(&self.sys, previous, latest)
+        } else {
+            vec![msr::undecodable()]
+        };
+        match health {
+            Health::Waiting => {}
+            Health::Drives(reports) => devices.extend(reports.iter().map(|(drive, report)| {
+                smart::device(
+                    drive,
+                    report.as_ref().map(String::as_str).map_err(String::as_str),
+                )
+            })),
+            Health::Unavailable(why) => devices.push(smart::unavailable(why)),
+        }
+        devices
+    }
 }
 
 impl Source for Helper {
+    #[expect(
+        clippy::significant_drop_tightening,
+        reason = "devices are decoded from the link in place; the reader waits at most one decode"
+    )]
     fn collect(&mut self, _elapsed: Duration) -> Vec<Device> {
-        let link = self.link.lock().unwrap_or_else(PoisonError::into_inner);
-        match &*link {
+        let watched = self.watched.lock().unwrap_or_else(PoisonError::into_inner);
+        let silent = watched.heard.elapsed() > SILENCE;
+        match &watched.link {
+            Link::Starting | Link::Streaming { .. } if silent => self.status(
+                Value::Unavailable(Unavailable::Unreadable(format!(
+                    "the helper has sent nothing for {} s",
+                    watched.heard.elapsed().as_secs()
+                ))),
+                String::new(),
+            ),
             Link::Starting => self.status(Value::Unavailable(Unavailable::Pending), String::new()),
             Link::Refused(why) => self.status(
                 Value::Unavailable(Unavailable::NeedsPrivilege(GRANT)),
@@ -226,20 +328,8 @@ impl Source for Helper {
             Link::Streaming {
                 previous,
                 latest,
-                reports,
-            } => {
-                let mut devices = if self.registers_decodable {
-                    msr::devices(&self.sys, previous.as_ref(), latest)
-                } else {
-                    vec![msr::undecodable()]
-                };
-                devices.extend(
-                    reports
-                        .iter()
-                        .map(|(drive, json)| smart::device(drive, json)),
-                );
-                devices
-            }
+                health,
+            } => self.streaming(previous.as_ref(), latest, health),
         }
     }
 }

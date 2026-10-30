@@ -15,7 +15,7 @@ use sysglance_core::{
 use super::{Source, optional, origin, text};
 
 const UNLIMITED_WATTS: f64 = 4000.0;
-pub const GRANT: &str = "install system/60-sysglance-rapl.rules";
+pub const GRANT: &str = "run install.sh: it lets your admin group read RAPL energy counters";
 
 pub struct Powercap {
     root: PathBuf,

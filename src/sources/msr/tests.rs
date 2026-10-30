@@ -8,7 +8,7 @@ use sysglance_core::{
 use tempfile::TempDir;
 
 use super::{decodable, devices};
-use crate::sources::helper::{Link, Registers, frames};
+use crate::sources::helper::{Link, Registers, Watched, frames};
 
 const COMET_LAKE: &str = "processor\t: 0\nvendor_id\t: GenuineIntel\ncpu family\t: 6\nmodel\t\t: 165\nmodel name\t: Intel(R) Core(TM) i7-10700K CPU @ 3.80GHz\n";
 
@@ -31,9 +31,9 @@ fn topology(cpus: u32, cores: u32) -> TempDir {
 }
 
 fn fixture() -> (Registers, Registers) {
-    let link = Mutex::new(Link::Starting);
-    frames(Cursor::new(include_str!("two-frames.txt")), &link);
-    match link.into_inner().unwrap() {
+    let watched = Mutex::new(Watched::new(Link::Starting));
+    frames(Cursor::new(include_str!("two-frames.txt")), &watched);
+    match watched.into_inner().unwrap().link {
         Link::Streaming {
             previous: Some(previous),
             latest,
