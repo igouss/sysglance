@@ -11,7 +11,7 @@ use sysglance_core::{
     reading::{Category, Device, Reading, Unavailable, Value},
 };
 
-use super::{Core, Source, cores, cpus, optional, origin, text};
+use super::{Source, cores, cpus, optional, origin, text};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Jiffies {
@@ -329,30 +329,41 @@ impl Cpu {
 
     fn throttling(&self) -> Option<Device> {
         let mut readings: Vec<Reading> = Vec::new();
-        for Core { dir, id: core, .. } in cores(&self.sys) {
-            let throttle = dir.join("thermal_throttle");
+        let mut packages: Vec<Option<String>> = Vec::new();
+        for core in cores(&self.sys) {
+            let throttle = core.dir.join("thermal_throttle");
             if !throttle.exists() {
                 continue;
             }
-            if readings.is_empty() {
+            if !packages.contains(&core.package) {
+                let (key, prefix) = core.package.as_ref().map_or_else(
+                    || ("cpu:throttle/package".to_owned(), "package".to_owned()),
+                    |package| {
+                        (
+                            format!("cpu:throttle/package{package}"),
+                            format!("package {package}"),
+                        )
+                    },
+                );
                 for (file, label) in [
-                    ("package_throttle_count", "package events"),
-                    ("package_throttle_total_time_ms", "package time throttled"),
-                    ("package_throttle_max_time_ms", "package longest throttle"),
+                    ("package_throttle_count", "events"),
+                    ("package_throttle_total_time_ms", "time throttled"),
+                    ("package_throttle_max_time_ms", "longest throttle"),
                 ] {
                     readings.push(throttle_reading(
                         &throttle,
                         file,
-                        label,
-                        "cpu:throttle/package",
+                        &format!("{prefix} {label}"),
+                        &key,
                     ));
                 }
+                packages.push(core.package.clone());
             }
             readings.push(throttle_reading(
                 &throttle,
                 "core_throttle_count",
-                &format!("core {core} events"),
-                &format!("cpu:throttle/core{core}"),
+                &format!("{} events", core.label()),
+                &format!("cpu:throttle/{}", core.slug()),
             ));
         }
         if readings.is_empty() {

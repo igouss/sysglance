@@ -330,3 +330,85 @@ fn nothing_to_read_means_no_devices() {
         0
     );
 }
+
+fn throttling_cpu(root: &Path, cpu: u32, package: u32, core: u32, siblings: &str) {
+    let dir = format!("sys/devices/system/cpu/cpu{cpu}");
+    write(
+        root,
+        &format!("{dir}/topology/core_id"),
+        &format!("{core}\n"),
+    );
+    write(
+        root,
+        &format!("{dir}/topology/physical_package_id"),
+        &format!("{package}\n"),
+    );
+    write(
+        root,
+        &format!("{dir}/topology/thread_siblings_list"),
+        &format!("{siblings}\n"),
+    );
+    write(
+        root,
+        &format!("{dir}/thermal_throttle/core_throttle_count"),
+        "0\n",
+    );
+    write(
+        root,
+        &format!("{dir}/thermal_throttle/package_throttle_count"),
+        "0\n",
+    );
+}
+
+fn throttle_labels(root: &Path) -> Vec<String> {
+    let devices = Cpu::new(root.join("proc"), root.join("sys")).collect(SECOND);
+    device(&devices, "cpu:throttle")
+        .readings
+        .iter()
+        .map(|r| r.label.clone())
+        .collect()
+}
+
+#[test]
+fn each_package_of_a_multi_socket_machine_is_named() {
+    let root = TempDir::new().unwrap();
+    throttling_cpu(root.path(), 0, 0, 0, "0");
+    throttling_cpu(root.path(), 1, 1, 0, "1");
+    assert_eq!(
+        throttle_labels(root.path()),
+        [
+            "package 0 events",
+            "package 0 time throttled",
+            "package 0 longest throttle",
+            "package 0 core 0 events",
+            "package 1 events",
+            "package 1 time throttled",
+            "package 1 longest throttle",
+            "package 1 core 0 events",
+        ]
+    );
+}
+
+#[test]
+fn an_offline_cpu_is_not_a_core() {
+    let root = TempDir::new().unwrap();
+    throttling_cpu(root.path(), 0, 0, 0, "0");
+    throttling_cpu(root.path(), 1, 0, 1, "1");
+    write(root.path(), "sys/devices/system/cpu/cpu1/online", "0\n");
+    let labels = throttle_labels(root.path());
+    assert_eq!(labels.last().map(String::as_str), Some("core 0 events"));
+}
+
+#[test]
+fn a_cpu_without_topology_is_not_a_core() {
+    let root = TempDir::new().unwrap();
+    throttling_cpu(root.path(), 0, 0, 0, "0");
+    write(
+        root.path(),
+        "sys/devices/system/cpu/cpu1/thermal_throttle/core_throttle_count",
+        "0\n",
+    );
+    write(root.path(), "sys/devices/system/cpu/cpu1/online", "1\n");
+    let labels = throttle_labels(root.path());
+    assert_eq!(labels.last().map(String::as_str), Some("core 0 events"));
+}

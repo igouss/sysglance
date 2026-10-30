@@ -204,8 +204,8 @@ fn core_states(sys: &Path, previous: Option<&Registers>, latest: &Registers) -> 
         .iter()
         .flat_map(|core| {
             entered.iter().map(move |(address, name)| Reading {
-                key: format!("msr:cores/core{}/{name}", core.id),
-                label: format!("core {} {name}", core.id),
+                key: format!("msr:cores/{}/{name}", core.slug()),
+                label: format!("{} {name}", core.label()),
                 value: share(previous, latest, core.cpu, *address),
                 origin: format!("MSR {address:#X} on cpu{}", core.cpu),
             })
