@@ -1,1 +1,1 @@
-%wheel ALL=(root) NOPASSWD: /usr/local/libexec/sysglance-helper ""
+%@GROUP@ ALL=(root) NOPASSWD: @HELPER@ ""
