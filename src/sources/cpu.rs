@@ -238,34 +238,77 @@ impl Cpu {
                 });
             }
         }
-        if let Some(no_turbo) = optional(&pstate.join("no_turbo")) {
+        let boost = self.sys.join("devices/system/cpu/cpufreq/boost");
+        let turbo = optional(&pstate.join("no_turbo"))
+            .map(|no_turbo| (no_turbo == 0, pstate.join("no_turbo")))
+            .or_else(|| optional(&boost).map(|boost_on| (boost_on != 0, boost.clone())));
+        if let Some((enabled, path)) = turbo {
             readings.push(Reading {
                 key: "cpu:clock/turbo".to_owned(),
                 label: "turbo".to_owned(),
-                value: Value::Text(if no_turbo == 0 { "enabled" } else { "disabled" }.to_owned()),
-                origin: origin(&pstate.join("no_turbo")),
+                value: Value::Text(if enabled { "enabled" } else { "disabled" }.to_owned()),
+                origin: origin(&path),
             });
         }
-        let range = |file: &str| optional(&policy.join(file));
-        if let (Some(low), Some(base), Some(high)) = (
-            range("cpuinfo_min_freq"),
-            range("base_frequency"),
-            range("cpuinfo_max_freq"),
+        let policies = self.policies();
+        let across = |file: &str| -> Vec<i64> {
+            policies
+                .iter()
+                .filter_map(|policy| optional(&policy.join(file)))
+                .collect()
+        };
+        let bases = across("base_frequency");
+        let base = bases
+            .first()
+            .copied()
+            .filter(|first| bases.iter().all(|base| base == first));
+        if let (Some(low), Some(high)) = (
+            across("cpuinfo_min_freq").into_iter().min(),
+            across("cpuinfo_max_freq").into_iter().max(),
         ) {
+            let (label, shown) = base.map_or_else(
+                || ("min / max", format!("{}/{} GHz", ghz(low), ghz(high))),
+                |base| {
+                    (
+                        "min / base / max",
+                        format!("{}/{}/{} GHz", ghz(low), ghz(base), ghz(high)),
+                    )
+                },
+            );
             readings.push(Reading {
                 key: "cpu:clock/range".to_owned(),
-                label: "min / base / max".to_owned(),
-                value: Value::Text(format!("{}/{}/{} GHz", ghz(low), ghz(base), ghz(high))),
-                origin: origin(&policy),
+                label: label.to_owned(),
+                value: Value::Text(shown),
+                origin: origin(&self.sys.join("devices/system/cpu/cpufreq")),
             });
         }
+        let detail = text(&policy.join("scaling_driver")).map_or_else(
+            |_| "cpufreq".to_owned(),
+            |driver| format!("cpufreq · {driver}"),
+        );
         Some(Device {
             key: "cpu:clock".to_owned(),
             title: "CPU clocks".to_owned(),
-            detail: "cpufreq · intel_pstate".to_owned(),
+            detail,
             category: Category::Processor,
             readings,
         })
+    }
+
+    fn policies(&self) -> Vec<PathBuf> {
+        let Ok(entries) = fs::read_dir(self.sys.join("devices/system/cpu/cpufreq")) else {
+            return Vec::new();
+        };
+        let mut policies: Vec<PathBuf> = entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .is_some_and(|name| name.to_string_lossy().starts_with("policy"))
+            })
+            .collect();
+        policies.sort();
+        policies
     }
 
     fn idle(&mut self, elapsed: Duration) -> Option<Device> {

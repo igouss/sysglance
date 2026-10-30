@@ -412,3 +412,84 @@ fn a_cpu_without_topology_is_not_a_core() {
     let labels = throttle_labels(root.path());
     assert_eq!(labels.last().map(String::as_str), Some("core 0 events"));
 }
+
+fn policy(root: &Path, index: u32, files: &[(&str, &str)]) {
+    write(
+        root,
+        &format!("sys/devices/system/cpu/cpu{index}/cpufreq/scaling_cur_freq"),
+        "800000\n",
+    );
+    for (file, content) in files {
+        write(
+            root,
+            &format!("sys/devices/system/cpu/cpufreq/policy{index}/{file}"),
+            &format!("{content}\n"),
+        );
+    }
+}
+
+fn clocks(root: &Path) -> Device {
+    let devices = Cpu::new(root.join("proc"), root.join("sys")).collect(SECOND);
+    device(&devices, "cpu:clock").clone()
+}
+
+#[test]
+fn the_range_spans_every_policy_and_drops_a_base_they_disagree_on() {
+    let root = TempDir::new().unwrap();
+    policy(
+        root.path(),
+        0,
+        &[
+            ("cpuinfo_min_freq", "800000"),
+            ("base_frequency", "1800000"),
+            ("cpuinfo_max_freq", "3600000"),
+        ],
+    );
+    policy(
+        root.path(),
+        1,
+        &[
+            ("cpuinfo_min_freq", "400000"),
+            ("base_frequency", "2400000"),
+            ("cpuinfo_max_freq", "5000000"),
+        ],
+    );
+    let clocks = clocks(root.path());
+    let range = clocks
+        .readings
+        .iter()
+        .find(|r| r.key == "cpu:clock/range")
+        .unwrap();
+    assert_eq!(range.label, "min / max");
+    assert_eq!(range.value, Value::Text("0.4/5.0 GHz".to_owned()));
+}
+
+#[test]
+fn the_detail_names_the_running_cpufreq_driver() {
+    let root = TempDir::new().unwrap();
+    policy(root.path(), 0, &[("scaling_driver", "amd-pstate-epp")]);
+    assert_eq!(clocks(root.path()).detail, "cpufreq · amd-pstate-epp");
+}
+
+#[test]
+fn without_a_driver_the_detail_is_cpufreq() {
+    let root = TempDir::new().unwrap();
+    policy(root.path(), 0, &[]);
+    assert_eq!(clocks(root.path()).detail, "cpufreq");
+}
+
+#[test]
+fn cpufreq_boost_reports_turbo_where_intel_pstate_is_absent() {
+    let root = TempDir::new().unwrap();
+    policy(root.path(), 0, &[]);
+    write(root.path(), "sys/devices/system/cpu/cpufreq/boost", "0\n");
+    assert_eq!(
+        *value(&clocks(root.path()), "cpu:clock/turbo"),
+        Value::Text("disabled".to_owned())
+    );
+    write(root.path(), "sys/devices/system/cpu/cpufreq/boost", "1\n");
+    assert_eq!(
+        *value(&clocks(root.path()), "cpu:clock/turbo"),
+        Value::Text("enabled".to_owned())
+    );
+}
