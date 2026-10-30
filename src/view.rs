@@ -2,7 +2,7 @@ mod model;
 mod paint;
 mod theme;
 
-use std::{collections::HashSet, rc::Rc, sync::Arc, time::Duration};
+use std::{collections::HashSet, process, rc::Rc, sync::Arc, time::Duration};
 
 use gpui::{
     AnyElement, App, Bounds, Context, IntoElement, MouseMoveEvent, Render, RenderImage,
@@ -333,8 +333,9 @@ pub fn run(shared: Shared, bench: bool) {
             });
             cx.new(|cx| Root::new(dashboard, window, cx))
         });
-        if opened.is_err() {
-            cx.quit();
+        if let Err(why) = opened {
+            eprintln!("sysglance: could not open a window: {why}");
+            process::exit(1);
         }
         cx.on_window_closed(|cx, _| cx.quit()).detach();
         cx.activate(true);

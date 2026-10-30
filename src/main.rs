@@ -6,7 +6,7 @@ mod sources;
 mod spark;
 mod view;
 
-use std::{path::Path, time::Duration};
+use std::{env, path::Path, process, time::Duration};
 
 use sources::{
     Source,
@@ -20,6 +20,10 @@ use sources::{
 };
 
 fn main() {
+    if env::var_os("WAYLAND_DISPLAY").is_none() {
+        eprintln!("sysglance: needs a Wayland session, and WAYLAND_DISPLAY is not set");
+        process::exit(1);
+    }
     let sources: Vec<Box<dyn Source>> = vec![
         Box::new(Cpu::new("/proc", "/sys")),
         Box::new(Powercap::new("/sys/class/powercap")),
@@ -29,6 +33,6 @@ fn main() {
         Box::new(Spd::new("/sys/bus/i2c/devices")),
         Box::new(Helper::spawn(Path::new(helper::INSTALLED), "/proc", "/sys")),
     ];
-    let bench = std::env::args().any(|argument| argument == "--bench-scroll");
+    let bench = env::args().any(|argument| argument == "--bench-scroll");
     view::run(sampler::spawn(sources, Duration::from_secs(1)), bench);
 }
