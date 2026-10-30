@@ -225,3 +225,31 @@ fn the_mmio_zone_is_titled_apart_from_the_msr_zone() {
         .collect();
     assert_eq!(titles, ["RAPL package-0 (MMIO)", "RAPL package-0"]);
 }
+
+fn rated_by(pl1_microwatts: &str) -> Level {
+    let root = TempDir::new().unwrap();
+    zone(
+        root.path(),
+        "intel-rapl:0",
+        "package-0",
+        0,
+        &[
+            ("constraint_0_power_limit_uw", pl1_microwatts),
+            ("constraint_0_max_power_uw", "125000000\n"),
+        ],
+    );
+    let mut source = Powercap::new(root.path());
+    source.collect(SECOND);
+    energy(root.path(), "intel-rapl:0", 130_000_000);
+    measured(&source.collect(SECOND)[0].readings[0].value).1
+}
+
+#[test]
+fn a_zero_pl1_falls_back_to_tdp() {
+    assert_eq!(rated_by("0\n"), Level::High);
+}
+
+#[test]
+fn a_pl1_of_4000_watts_counts_as_unlimited() {
+    assert_eq!(rated_by("4000000000\n"), Level::High);
+}
