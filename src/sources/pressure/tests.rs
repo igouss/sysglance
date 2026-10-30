@@ -31,9 +31,17 @@ fn a_line_without_a_total_is_skipped() {
 }
 
 #[test]
-fn no_pressure_files_means_no_device() {
+fn without_pressure_files_the_card_says_the_kernel_lacks_psi() {
     let root = TempDir::new().unwrap();
-    assert_eq!(Pressure::new(root.path()).collect(SECOND).len(), 0);
+    let devices = Pressure::new(root.path()).collect(SECOND);
+    assert_eq!(devices.len(), 1);
+    let reading = &devices[0].readings[0];
+    assert_eq!(reading.value, Value::Unavailable(Unavailable::NotSupported));
+    assert!(
+        reading
+            .origin
+            .ends_with("this kernel has no PSI, or was booted with psi=0")
+    );
 }
 
 #[test]

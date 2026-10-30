@@ -63,7 +63,15 @@ impl Source for Pressure {
             }
         }
         if readings.is_empty() {
-            return Vec::new();
+            readings.push(Reading {
+                key: "pressure/status".to_owned(),
+                label: "pressure stall".to_owned(),
+                value: Value::Unavailable(Unavailable::NotSupported),
+                origin: format!(
+                    "{}: this kernel has no PSI, or was booted with psi=0",
+                    self.root.display()
+                ),
+            });
         }
         vec![Device {
             key: "pressure".to_owned(),
