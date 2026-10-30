@@ -34,6 +34,8 @@ fn manufacturer(bank: u8, code: u8) -> String {
     }
 }
 
+const SIGNAL_LOADING_3DS: u8 = 0b10;
+
 pub fn ddr4(spd: &[u8]) -> Option<Module> {
     if spd.len() < 350 || spd[2] != DDR4 {
         return None;
@@ -42,7 +44,14 @@ pub fn ddr4(spd: &[u8]) -> Option<Module> {
     let width = 4_u8 << (spd[12] & 0x07);
     let ranks = ((spd[12] >> 3) & 0x07) + 1;
     let bus = 8_u64 << (spd[13] & 0x07);
-    let bytes = die_megabits / 8 * 1024 * 1024 * (bus / u64::from(width)) * u64::from(ranks);
+    let stacked = spd[6] & 0x03 == SIGNAL_LOADING_3DS;
+    let dies = if stacked {
+        ((spd[6] >> 4) & 0x07) + 1
+    } else {
+        1
+    };
+    let logical_ranks = u64::from(ranks) * u64::from(dies);
+    let bytes = die_megabits / 8 * 1024 * 1024 * (bus / u64::from(width)) * logical_ranks;
     let fine = i64::from(i8::from_ne_bytes([spd[125]]));
     let cycle = i64::from(spd[18]) * 125 + fine;
     let transfers = u32::try_from(2_000_000 / cycle.max(1)).ok()?;

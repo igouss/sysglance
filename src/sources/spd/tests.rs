@@ -114,3 +114,21 @@ fn modules_are_read_once() {
     fs::remove_dir_all(root.path().join("19-0050")).unwrap();
     assert_eq!(spd.collect(Duration::ZERO), first);
 }
+
+fn with_package(package: u8) -> Vec<u8> {
+    let mut spd = CORSAIR.to_vec();
+    spd[6] = package;
+    spd
+}
+
+#[test]
+fn a_3ds_module_counts_every_stacked_die() {
+    let four_high = with_package(0b1011_0010);
+    assert_eq!(ddr4(&four_high).map(|module| module.bytes), Some(64 << 30));
+}
+
+#[test]
+fn die_count_without_3ds_signal_loading_is_ignored() {
+    let dual_die = with_package(0b1001_0001);
+    assert_eq!(ddr4(&dual_die).map(|module| module.bytes), Some(16 << 30));
+}
