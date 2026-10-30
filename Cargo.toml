@@ -3,7 +3,7 @@ members = [".", "core", "helper"]
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.89"
+rust-version = "1.95"
 publish = false
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/igouss/sysglance"
@@ -28,7 +28,7 @@ must_use_candidate = "allow"
 [package]
 name = "sysglance"
 version = "0.1.0"
-description = "At-a-glance view of every sensor and counter this machine exposes"
+description = "At-a-glance view of every sensor and counter a Linux computer exposes"
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
