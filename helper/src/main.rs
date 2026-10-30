@@ -139,7 +139,6 @@ fn round(smartctl: Option<&str>, timeout: Duration) -> Vec<String> {
 }
 
 fn main() -> io::Result<()> {
-    let cpus = cpus(Path::new("/dev/cpu"));
     let pending: Arc<Mutex<Vec<String>>> = Arc::default();
     let producer = Arc::clone(&pending);
     let smartctl = SMARTCTL.into_iter().find(|path| Path::new(path).is_file());
@@ -157,7 +156,7 @@ fn main() -> io::Result<()> {
     let mut out = BufWriter::new(io::stdout().lock());
     loop {
         let started = Instant::now();
-        registers(&mut out, &cpus)?;
+        registers(&mut out, &cpus(Path::new("/dev/cpu")))?;
         let health = mem::take(&mut *pending.lock().unwrap_or_else(PoisonError::into_inner));
         for line in health {
             writeln!(out, "{line}")?;
